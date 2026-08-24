@@ -3,6 +3,7 @@ import { Plus, HelpCircle, X } from 'lucide-react';
 import { ReconciliationRun } from './types/reconciliation';
 import { INITIAL_RECONCILIATION_RUNS } from './data/mockData';
 import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
 import { ReconciliationListTable } from './components/ReconciliationListTable';
 import { AddNewReconciliationModal } from './components/AddNewReconciliationModal';
 import { ViewReconciliationModal } from './components/ViewReconciliationModal';
@@ -12,6 +13,7 @@ import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 export default function App() {
   // Master state for all reconciliation records
   const [runs, setRuns] = useState<ReconciliationRun[]>(INITIAL_RECONCILIATION_RUNS);
+  const [activeNavTab, setActiveNavTab] = useState<string>('reconciliations');
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -67,44 +69,56 @@ export default function App() {
       {/* Top Header Bar for 4see PRO */}
       <Header onOpenShortcuts={() => setIsShortcutsOpen(true)} />
 
-      {/* Main Single Page: RECONCILIATIONS */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* 1. MAIN PAGE TITLE & TOP ACTION BAR */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight uppercase font-sans">
-                RECONCILIATIONS
-              </h1>
-              <span className="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-gray-200 font-mono">
-                {runs.length} Records
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-gray-500 mt-1 font-normal">
-              Manage and review bank statement reconciliations.
-            </p>
-          </div>
-
-          {/* Top-Right Primary Button: [ + Add New Reconciliation ] */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(true)}
-              className="w-full sm:w-auto bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New Reconciliation</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 2. RECONCILIATION LIST TABLE */}
-        <ReconciliationListTable
-          runs={runs}
-          onViewRun={handleViewRun}
-          onAddNew={() => setIsAddModalOpen(true)}
+      {/* Main Body with Left Menu & 100% Full Width Table */}
+      <div className="flex flex-1 w-full overflow-hidden">
+        {/* Left Navigation Menu */}
+        <Sidebar
+          activeTab={activeNavTab}
+          onSelectTab={setActiveNavTab}
+          reconciliationCount={runs.length}
         />
-      </main>
+
+        {/* Main 100% Full-Width Workspace: RECONCILIATIONS */}
+        <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-y-auto">
+          {/* 1. MAIN PAGE TITLE & TOP ACTION BAR */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight uppercase font-sans">
+                  RECONCILIATIONS
+                </h1>
+                <span className="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-gray-200 font-mono">
+                  {runs.length} Records
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1 font-normal">
+                Manage and review bank statement reconciliations across all accounts.
+              </p>
+            </div>
+
+            {/* Top-Right Primary Button: [ + Add New Reconciliation ] */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="w-full sm:w-auto bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Reconciliation</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. RECONCILIATION LIST TABLE (100% Width) */}
+          <div className="w-full">
+            <ReconciliationListTable
+              runs={runs}
+              onViewRun={handleViewRun}
+              onAddNew={() => setIsAddModalOpen(true)}
+            />
+          </div>
+        </main>
+      </div>
 
       {/* 3 - 14. ADD NEW RECONCILIATION MODAL (Editable, 2-column workspace, drag & drop, accordions) */}
       <AddNewReconciliationModal

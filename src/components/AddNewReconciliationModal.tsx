@@ -24,7 +24,11 @@ import {
   Maximize2,
   ExternalLink,
   Split,
-  Target
+  Target,
+  Loader2,
+  Cpu,
+  Zap,
+  FileCheck
 } from 'lucide-react';
 import { 
   BankTransaction, 
@@ -68,10 +72,24 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
   } | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
 
+  // Auto-Match Processing Modal State
+  const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false);
+  const [processingStage, setProcessingStage] = useState<'parsing' | 'matching' | 'finalizing' | 'done'>('parsing');
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [stagedFile, setStagedFile] = useState<{
+    name: string;
+    size: string;
+    period: string;
+  } | null>(null);
+
   // Reset state when modal is opened
   useEffect(() => {
     if (isOpen) {
       setUploadedFile(null);
+      setStagedFile(null);
+      setIsProcessingModalOpen(false);
+      setProcessingStage('parsing');
+      setProcessingProgress(0);
       setTransactions(INITIAL_TRANSACTIONS);
       setInvoices(INITIAL_INVOICES);
       setExpandedTxnIds(new Set(['TXN-10021', 'TXN-10025']));
@@ -348,6 +366,69 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
     setInvoices(currentInvs);
   };
 
+  // Orchestrate statement upload & auto-match processing modal simulation
+  const initiateStatementUpload = (fileData: { name: string; size: string; period: string }) => {
+    setStagedFile(fileData);
+    setIsProcessingModalOpen(true);
+    setProcessingStage('parsing');
+    setProcessingProgress(20);
+
+    const timer1 = setTimeout(() => {
+      setProcessingStage('matching');
+      setProcessingProgress(60);
+    }, 450);
+
+    const timer2 = setTimeout(() => {
+      setProcessingStage('finalizing');
+      setProcessingProgress(90);
+    }, 950);
+
+    const timer3 = setTimeout(() => {
+      setProcessingStage('done');
+      setProcessingProgress(100);
+    }, 1450);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  };
+
+  const handleApplyAutoMatchAndOpen = () => {
+    if (stagedFile) {
+      setUploadedFile(stagedFile);
+    }
+    // Apply auto matching
+    setTransactions(INITIAL_TRANSACTIONS);
+    setInvoices(INITIAL_INVOICES);
+    setIsProcessingModalOpen(false);
+    setIsDirty(true);
+  };
+
+  const handleSkipAutoMatch = () => {
+    if (stagedFile) {
+      setUploadedFile(stagedFile);
+    }
+    // Clear all pre-matches for raw manual workspace
+    setTransactions(prev => prev.map(t => ({
+      ...t,
+      matchedInvoiceIds: [],
+      status: 'Unmatched',
+      matchConfidence: 0,
+      variance: t.amount,
+      matchReasons: []
+    })));
+    setInvoices(prev => prev.map(inv => ({
+      ...inv,
+      matchedBankTxnId: undefined,
+      status: 'Unmatched',
+      matchConfidence: 0
+    })));
+    setIsProcessingModalOpen(false);
+    setIsDirty(true);
+  };
+
   // Handle local file selection
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -355,12 +436,11 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
-      setUploadedFile({
+      initiateStatementUpload({
         name: file.name,
         size: sizeMb === '0.0 MB' ? '2.4 MB' : sizeMb,
         period: `${periodFrom} → ${periodTo}`
       });
-      setIsDirty(true);
     }
   };
 
@@ -368,12 +448,11 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
-      setUploadedFile({
+      initiateStatementUpload({
         name: file.name,
         size: sizeMb === '0.0 MB' ? '2.4 MB' : sizeMb,
         period: `${periodFrom} → ${periodTo}`
       });
-      setIsDirty(true);
     }
   };
 
@@ -706,12 +785,11 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                     <button
                       type="button"
                       onClick={() => {
-                        setUploadedFile({
+                        initiateStatementUpload({
                           name: 'HSBC_August_2026.pdf',
                           size: '2.4 MB',
                           period: `${periodFrom} → ${periodTo}`
                         });
-                        setIsDirty(true);
                       }}
                       className="px-3.5 py-1.5 bg-white hover:bg-orange-50 text-[#EA580C] border border-orange-300 hover:border-[#EA580C] text-xs font-bold rounded-md shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
@@ -1461,6 +1539,198 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                 onClose={() => setPdfViewMode('none')}
                 onSelectTxn={(ref) => setSelectedPdfTxnRef(ref)}
               />
+            </div>
+          </div>
+        )}
+
+        {/* 15. STATEMENT AUTO-MATCH PROCESSING SMALL MODAL */}
+        {isProcessingModalOpen && stagedFile && (
+          <div className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+              {/* Header */}
+              <div className="px-5 pt-5 pb-4 border-b border-gray-100 flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#EA580C] shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 leading-tight">
+                      {processingStage === 'done' ? 'Statement Processed & Auto-Matched' : 'Processing Bank Statement'}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[11px] font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 truncate max-w-[200px]">
+                        {stagedFile.name}
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-mono">
+                        {stagedFile.size}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {processingStage === 'done' && (
+                  <button
+                    type="button"
+                    onClick={handleApplyAutoMatchAndOpen}
+                    className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-4">
+                {/* Progress Bar */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-gray-700">
+                      {processingStage === 'parsing' && 'Extracting transactions & OCR parsing...'}
+                      {processingStage === 'matching' && 'Cross-referencing invoices & ledger...'}
+                      {processingStage === 'finalizing' && 'Executing auto-match rule engine...'}
+                      {processingStage === 'done' && 'Auto-matching complete!'}
+                    </span>
+                    <span className="font-mono font-bold text-[#EA580C]">
+                      {processingProgress}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#EA580C] transition-all duration-300 rounded-full"
+                      style={{ width: `${processingProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Processing Steps Checklist */}
+                <div className="space-y-2.5 bg-gray-50/80 border border-gray-200/80 rounded-xl p-3.5 text-xs">
+                  {/* Step 1 */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {processingProgress >= 40 ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <Loader2 className="w-4 h-4 text-[#EA580C] animate-spin shrink-0" />
+                      )}
+                      <span className={`text-xs ${processingProgress >= 40 ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
+                        Extract statement line items & balances
+                      </span>
+                    </div>
+                    {processingProgress >= 40 && (
+                      <span className="text-[10px] font-mono font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        10 items
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {processingProgress >= 85 ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : processingProgress >= 40 ? (
+                        <Loader2 className="w-4 h-4 text-[#EA580C] animate-spin shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0" />
+                      )}
+                      <span className={`text-xs ${processingProgress >= 85 ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
+                        Amount, date & reference correlation
+                      </span>
+                    </div>
+                    {processingProgress >= 85 && (
+                      <span className="text-[10px] font-mono font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        100% matched
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {processingStage === 'done' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : processingProgress >= 85 ? (
+                        <Loader2 className="w-4 h-4 text-[#EA580C] animate-spin shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0" />
+                      )}
+                      <span className={`text-xs ${processingStage === 'done' ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
+                        Multi-invoice batch correlation & tolerance
+                      </span>
+                    </div>
+                    {processingStage === 'done' && (
+                      <span className="text-[10px] font-mono font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        Applied
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Auto-Match Result Stats (Shown when ready) */}
+                {processingStage === 'done' && (
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-emerald-900 flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        7 Transactions Auto-Matched
+                      </span>
+                      <span className="text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                        88% Reconciled
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-emerald-200/60">
+                      <div className="bg-white/80 rounded-lg p-1.5 border border-emerald-100">
+                        <div className="text-[10px] text-gray-500">Auto-Matched</div>
+                        <div className="font-mono font-bold text-xs text-gray-900">7 items</div>
+                      </div>
+                      <div className="bg-white/80 rounded-lg p-1.5 border border-emerald-100">
+                        <div className="text-[10px] text-gray-500">Unmatched</div>
+                        <div className="font-mono font-bold text-xs text-orange-600">3 items</div>
+                      </div>
+                      <div className="bg-white/80 rounded-lg p-1.5 border border-emerald-100">
+                        <div className="text-[10px] text-gray-500">Matched Sum</div>
+                        <div className="font-mono font-bold text-[11px] text-emerald-700">$184.8k</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions Footer */}
+              <div className="px-5 py-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-3">
+                {processingStage === 'done' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleSkipAutoMatch}
+                      className="px-3 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Clear & Manual Match
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyAutoMatchAndOpen}
+                      className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                    >
+                      <span>Apply Matches & Open Workspace</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[11px] text-gray-400 font-mono">
+                      Running rule heuristics...
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleApplyAutoMatchAndOpen}
+                      className="px-3.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer ml-auto"
+                    >
+                      Skip to Results
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}
