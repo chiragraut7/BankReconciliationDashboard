@@ -1,0 +1,6 @@
+{
+  "name": "4see PRO - Enterprise Bank Reconciliation",
+  "description": "High-density enterprise single-page bank statement reconciliation and invoice matching engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
