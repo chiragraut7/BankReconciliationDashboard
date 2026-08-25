@@ -84,7 +84,7 @@ export default function App() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5">
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight uppercase font-sans">
+                <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight uppercase font-['Open_Sans',sans-serif]">
                   RECONCILIATIONS
                 </h1>
                 <span className="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-gray-200 font-mono">
