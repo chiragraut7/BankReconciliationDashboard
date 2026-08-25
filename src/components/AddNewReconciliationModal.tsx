@@ -584,7 +584,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
         </div>
 
       {/* Modal Scrollable Workspace */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-white">
+      <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-[#F6F8FA]">
         <div className="max-w-[1700px] mx-auto space-y-5">
           {/* 4. RECONCILIATION INFORMATION & 5. STATEMENT UPLOAD */}
           {uploadedFile ? (
@@ -722,7 +722,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
               </div>
 
               {/* 5. STATEMENT UPLOAD */}
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">
                   Upload Bank Statement
                 </label>
@@ -734,7 +734,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                   className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
                     isDraggingFile 
                       ? 'border-[#EA580C] bg-orange-50/50' 
-                      : 'border-gray-300 hover:border-[#EA580C] bg-gray-50/60'
+                      : 'border-gray-300 hover:border-[#EA580C] bg-white'
                   }`}
                 >
                   <input
@@ -779,7 +779,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
 
           {!uploadedFile ? (
             /* Empty placeholder before statement upload */
-            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-12 text-center flex flex-col items-center justify-center space-y-3">
+            <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-12 text-center flex flex-col items-center justify-center space-y-3 shadow-sm">
               <div className="w-12 h-12 rounded-full bg-orange-100/80 border border-orange-200 flex items-center justify-center text-[#EA580C]">
                 <Layers className="w-6 h-6" />
               </div>
@@ -810,30 +810,30 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
           ) : (
             <>
               {/* 13. RECONCILIATION TOTALS SUMMARY BAR */}
-              <div className="bg-[#1E293B] text-white rounded-xl p-3.5 shadow-xs grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs animate-in fade-in duration-200">
-                <div className="border-r border-slate-700/60 pr-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Transactions</span>
-                  <div className="text-base font-bold font-mono text-white mt-0.5">{totalTransactionsCount}</div>
+              <div className="bg-white border border-gray-200 text-gray-900 rounded-xl p-3.5 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs animate-in fade-in duration-200">
+                <div className="border-r border-gray-200 pr-2">
+                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Transactions</span>
+                  <div className="text-base font-bold font-mono text-gray-900 mt-0.5">{totalTransactionsCount}</div>
                 </div>
-                <div className="border-r border-slate-700/60 pr-2">
-                  <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Matched</span>
-                  <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">{matchedTxnCount}</div>
+                <div className="border-r border-gray-200 pr-2">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Matched</span>
+                  <div className="text-base font-bold font-mono text-emerald-600 mt-0.5">{matchedTxnCount}</div>
                 </div>
-                <div className="border-r border-slate-700/60 pr-2">
-                  <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">Unmatched</span>
-                  <div className="text-base font-bold font-mono text-amber-400 mt-0.5">{unmatchedTxnCount}</div>
+                <div className="border-r border-gray-200 pr-2">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 tracking-wider">Unmatched</span>
+                  <div className="text-base font-bold font-mono text-amber-600 mt-0.5">{unmatchedTxnCount}</div>
                 </div>
-                <div className="border-r border-slate-700/60 pr-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Statement Amount</span>
-                  <div className="text-base font-bold font-mono text-white mt-0.5">{formatCurrency(statementTotalAmount)}</div>
+                <div className="border-r border-gray-200 pr-2">
+                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Statement Amount</span>
+                  <div className="text-base font-bold font-mono text-gray-900 mt-0.5">{formatCurrency(statementTotalAmount)}</div>
                 </div>
-                <div className="border-r border-slate-700/60 pr-2">
-                  <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Matched Amount</span>
-                  <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">{formatCurrency(matchedTotalAmount)}</div>
+                <div className="border-r border-gray-200 pr-2">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Matched Amount</span>
+                  <div className="text-base font-bold font-mono text-emerald-600 mt-0.5">{formatCurrency(matchedTotalAmount)}</div>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Variance</span>
-                  <div className={`text-base font-bold font-mono mt-0.5 ${totalVariance === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Variance</span>
+                  <div className={`text-base font-bold font-mono mt-0.5 ${totalVariance === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
                     {formatCurrency(totalVariance)}
                   </div>
                 </div>
@@ -1033,9 +1033,11 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                                 ? 'bg-orange-100 ring-2 ring-[#EA580C]'
                                 : selectedPdfTxnRef === txn.reference && pdfViewMode === 'split'
                                   ? 'bg-orange-50/90 ring-1 ring-orange-300'
-                                  : isMatched
-                                    ? 'bg-emerald-50/30 hover:bg-emerald-50/60'
-                                    : 'hover:bg-amber-50/30 bg-white'
+                                  : isExpanded
+                                    ? 'bg-[#FFF8F3] border-l-4 border-l-[#EA580C]'
+                                    : isMatched
+                                      ? 'bg-emerald-50/30 hover:bg-emerald-50/60'
+                                      : 'hover:bg-amber-50/30 bg-white'
                             }`}
                           >
                             {/* Date */}
@@ -1103,19 +1105,19 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
 
                           {/* 9 & 10. MATCHED INVOICE ACCORDION (Expanded state directly under row) */}
                           {isExpanded && (
-                            <tr className="bg-gray-50/80 border-b border-gray-200">
-                              <td colSpan={5} className="p-3">
-                                <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-2xs space-y-2.5">
+                            <tr className="bg-[#FFF8F3] border-b-2 border-orange-200/80">
+                              <td colSpan={5} className="p-3.5 pl-5">
+                                <div className="bg-white border border-orange-200/90 rounded-xl p-3.5 shadow-sm space-y-2.5 ring-1 ring-orange-100/80">
                                   {isMatched ? (
                                     <>
-                                      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                                        <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                                      <div className="flex items-center justify-between border-b border-orange-100 pb-2">
+                                        <div className="text-[11px] font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
                                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                           <span>Matched Invoices ({matchedInvoicesForTxn.length})</span>
                                         </div>
                                         <div className="flex items-center gap-2 text-xs font-mono">
                                           <span className="text-gray-500 font-sans">Statement Amount:</span>
-                                          <span className="font-bold text-gray-900">{formatCurrency(txn.amount)}</span>
+                                          <span className="font-bold text-gray-900 bg-orange-50/80 px-2 py-0.5 rounded border border-orange-200">{formatCurrency(txn.amount)}</span>
                                         </div>
                                       </div>
 

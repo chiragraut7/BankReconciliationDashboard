@@ -79,7 +79,7 @@ export default function App() {
         />
 
         {/* Main 100% Full-Width Workspace: RECONCILIATIONS */}
-        <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-y-auto">
+        <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-y-auto bg-[#F6F8FA]">
           {/* 1. MAIN PAGE TITLE & TOP ACTION BAR */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5">
             <div>

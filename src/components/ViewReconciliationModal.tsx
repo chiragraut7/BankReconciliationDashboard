@@ -77,17 +77,17 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-hidden animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden border border-gray-200">
+    <div className="fixed inset-0 z-50 p-5 bg-black/60 backdrop-blur-xs flex items-center justify-center animate-in fade-in duration-150 font-sans">
+      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col w-full h-full overflow-hidden">
         {/* 15. TOP BAR OF VIEW RECONCILIATION MODAL */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50/50 flex items-center justify-between">
+        <div className="px-6 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-orange-100 text-[#EA580C] flex items-center justify-center font-bold">
-              <Building2 className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 text-[#EA580C] flex items-center justify-center font-bold">
+              <Building2 className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-gray-900">
+                <h2 className="text-base font-bold text-gray-900 tracking-tight">
                   Reconciliation Details
                 </h2>
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -148,7 +148,7 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
         </div>
 
         {/* 16. SUMMARY INFORMATION CARDS & WORKSPACE */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-white">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-[#F6F8FA]">
           <div className="max-w-[1700px] mx-auto space-y-5">
             <div className="bg-white border border-gray-200 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-xs shadow-2xs">
               <div>
@@ -285,9 +285,11 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                               className={`cursor-pointer transition-colors ${
                                 isSelectedPdf && pdfViewMode === 'split'
                                   ? 'bg-orange-50/90 ring-1 ring-orange-300'
-                                  : isMatched
-                                    ? 'bg-emerald-50/20 hover:bg-emerald-50/50'
-                                    : 'hover:bg-gray-50'
+                                  : isExpanded
+                                    ? 'bg-[#FFF8F3] border-l-4 border-l-[#EA580C]'
+                                    : isMatched
+                                      ? 'bg-emerald-50/20 hover:bg-emerald-50/50'
+                                      : 'hover:bg-gray-50'
                               }`}
                             >
                               {/* Date */}
@@ -350,10 +352,10 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
 
                             {/* 19. STATEMENT ACCORDION DETAILS (Expanded state) */}
                             {isExpanded && (
-                              <tr className="bg-gray-50/70 border-b border-gray-200">
-                                <td colSpan={5} className="p-4">
-                                  <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-2xs space-y-3">
-                                    <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                              <tr className="bg-[#FFF8F3] border-b-2 border-orange-200/80">
+                                <td colSpan={5} className="p-4 pl-6">
+                                  <div className="bg-white border border-orange-200/90 rounded-xl p-4 shadow-sm space-y-3 ring-1 ring-orange-100/80">
+                                    <div className="flex items-center justify-between border-b border-orange-100 pb-2.5">
                                       <div className="flex items-center gap-2">
                                         <FileText className="w-4 h-4 text-[#EA580C]" />
                                         <span className="text-xs font-bold text-gray-900">
@@ -361,18 +363,18 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-3 text-xs font-mono">
-                                        <div>
-                                          <span className="text-gray-500">Statement Amount: </span>
+                                        <div className="bg-orange-50/80 px-2 py-0.5 rounded border border-orange-200">
+                                          <span className="text-gray-500 font-sans">Statement: </span>
                                           <strong className="text-gray-900">{formatCurrency(txn.amount)}</strong>
                                         </div>
-                                        <div>
-                                          <span className="text-gray-500">Matched Total: </span>
+                                        <div className="bg-emerald-50/80 px-2 py-0.5 rounded border border-emerald-200">
+                                          <span className="text-gray-500 font-sans">Matched: </span>
                                           <strong className="text-emerald-700">{formatCurrency(totalMatchedAmount)}</strong>
                                         </div>
                                         {variance > 0 && (
-                                          <div>
-                                            <span className="text-gray-500">Variance: </span>
-                                            <strong className="text-red-600">{formatCurrency(variance)}</strong>
+                                          <div className="bg-amber-50/80 px-2 py-0.5 rounded border border-amber-200">
+                                            <span className="text-gray-500 font-sans">Variance: </span>
+                                            <strong className="text-amber-700">{formatCurrency(variance)}</strong>
                                           </div>
                                         )}
                                       </div>
