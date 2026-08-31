@@ -277,7 +277,8 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredTransactions.map((txn) => {
+                      {filteredTransactions.map((txn, index) => {
+                        const rowKey = `${run.id}_${txn.id}_${index}`;
                         const isExpanded = expandedTxnIds.has(txn.id);
                         const isMatched = txn.matchedInvoiceIds.length > 0;
                         const isSelectedPdf = selectedPdfTxnRef === txn.reference;
@@ -290,7 +291,7 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                         const variance = Math.abs(txn.amount - totalMatchedAmount);
 
                         return (
-                          <React.Fragment key={txn.id}>
+                          <React.Fragment key={rowKey}>
                             {/* 18. STATEMENT ACCORDION ROW (Collapsed state) */}
                             <tr
                               onClick={() => {

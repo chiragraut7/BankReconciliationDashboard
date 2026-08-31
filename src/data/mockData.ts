@@ -1,4 +1,4 @@
-import { BankAccountOption, BankTransaction, MatchedInvoice, ReconciliationRun } from '../types/reconciliation';
+import { BankAccountOption, BankTransaction, MatchedInvoice, ReconciliationRun, ETLBatch } from '../types/reconciliation';
 
 export const BANK_ACCOUNTS: BankAccountOption[] = [
   {
@@ -557,5 +557,103 @@ export const INITIAL_RECONCILIATION_RUNS: ReconciliationRun[] = [
     reconciledBy: 'Dharmendra Joshi (Lead Controller)',
     transactions: INITIAL_TRANSACTIONS,
     invoices: INITIAL_INVOICES
+  }
+];
+
+export const INITIAL_ETL_BATCHES: ETLBatch[] = [
+  {
+    id: 'BATCH-2026-001',
+    name: 'HSBC_Aug2026_ERP_Posting_Batch',
+    format: 'CSV_ERP',
+    status: 'Ready',
+    reconciliationIds: ['REC-000124'],
+    reconciliationNames: ['HSBC Corporate (Ref #124)'],
+    totalTransactionsCount: 22,
+    totalInvoicesCount: 22,
+    totalAmount: 148200.00,
+    currency: 'USD',
+    createdBy: 'Dharmendra Joshi',
+    createdAt: '28-Aug-2026 10:30',
+    lastModified: '28-Aug-2026 14:15',
+    fileSize: '42.8 KB',
+    postingDate: '31-Aug-2026',
+    exportDestination: 'SAP General Ledger Feed',
+    notes: 'Approved reconciliation batch for August 2026 corporate operating transactions.'
+  },
+  {
+    id: 'BATCH-2026-002',
+    name: 'JPMorgan_Treasury_July2026_Camt054',
+    format: 'XML_CAMT054',
+    status: 'Exported',
+    reconciliationIds: ['REC-000123'],
+    reconciliationNames: ['JPMorgan Chase Treasury (Ref #123)'],
+    totalTransactionsCount: 30,
+    totalInvoicesCount: 28,
+    totalAmount: 382900.00,
+    currency: 'USD',
+    createdBy: 'Sarah Jenkins',
+    createdAt: '15-Aug-2026 09:12',
+    lastModified: '16-Aug-2026 11:40',
+    fileSize: '98.4 KB',
+    postingDate: '15-Aug-2026',
+    exportDestination: 'Treasury Liquidity Bus (ISO20022)',
+    notes: 'Treasury & FX settlement batch synchronized to core ledger.'
+  },
+  {
+    id: 'BATCH-2026-003',
+    name: 'CitiMarkets_July2026_NetSuite_Sync',
+    format: 'CSV_NETSUITE',
+    status: 'Processing',
+    reconciliationIds: ['REC-000122'],
+    reconciliationNames: ['Citibank Global Markets (Ref #122)'],
+    totalTransactionsCount: 18,
+    totalInvoicesCount: 16,
+    totalAmount: 215400.00,
+    currency: 'USD',
+    createdBy: 'Alex Rivera',
+    createdAt: '12-Aug-2026 16:45',
+    lastModified: '14-Aug-2026 08:20',
+    fileSize: '35.1 KB',
+    postingDate: '15-Aug-2026',
+    exportDestination: 'Oracle NetSuite Financials',
+    notes: 'FX settlement and escrow disbursements batch.'
+  },
+  {
+    id: 'BATCH-2026-004',
+    name: 'Barclays_Payroll_July2026_IIF',
+    format: 'QUICKBOOKS_IIF',
+    status: 'Draft',
+    reconciliationIds: ['REC-000121'],
+    reconciliationNames: ['Barclays Commercial (Ref #121)'],
+    totalTransactionsCount: 22,
+    totalInvoicesCount: 20,
+    totalAmount: 94800.00,
+    currency: 'USD',
+    createdBy: 'Dharmendra Joshi',
+    createdAt: '10-Aug-2026 11:00',
+    lastModified: '10-Aug-2026 11:00',
+    fileSize: '19.6 KB',
+    postingDate: '31-Jul-2026',
+    exportDestination: 'Payroll & Operating Journal',
+    notes: 'Draft ETL batch pending final review by lead controller.'
+  },
+  {
+    id: 'BATCH-2026-005',
+    name: 'HSBC_June2026_Consolidated_Batch',
+    format: 'CSV_ERP',
+    status: 'Exported',
+    reconciliationIds: ['REC-000120'],
+    reconciliationNames: ['HSBC Corporate (Ref #120)'],
+    totalTransactionsCount: 42,
+    totalInvoicesCount: 36,
+    totalAmount: 310500.00,
+    currency: 'USD',
+    createdBy: 'Dharmendra Joshi',
+    createdAt: '01-Aug-2026 08:30',
+    lastModified: '02-Aug-2026 17:00',
+    fileSize: '76.2 KB',
+    postingDate: '30-Jun-2026',
+    exportDestination: 'SAP General Ledger Feed',
+    notes: 'Fully matched and posted batch for Q2 fiscal close.'
   }
 ];

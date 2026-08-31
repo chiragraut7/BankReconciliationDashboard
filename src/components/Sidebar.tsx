@@ -9,19 +9,22 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
-  FolderOpen
+  FolderOpen,
+  Layers
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab?: string;
   onSelectTab?: (tab: string) => void;
   reconciliationCount?: number;
+  batchCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab = 'reconciliations',
   onSelectTab,
-  reconciliationCount = 5
+  reconciliationCount = 5,
+  batchCount = 5
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
@@ -32,6 +35,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: FileSpreadsheet,
       badge: reconciliationCount > 0 ? `${reconciliationCount}` : undefined,
       active: true
+    },
+    {
+      id: 'batches',
+      label: 'Create Batch',
+      icon: Layers,
+      badge: batchCount > 0 ? `${batchCount}` : undefined,
+      active: false
     },
     {
       id: 'statements',

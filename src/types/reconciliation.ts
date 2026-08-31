@@ -104,3 +104,27 @@ export interface BankAccountOption {
   currency: string;
   defaultOpeningBalance: number;
 }
+
+export type BatchStatus = 'Ready' | 'Exported' | 'Processing' | 'Draft' | 'Failed';
+
+export type ETLFormat = 'CSV_ERP' | 'CSV_NETSUITE' | 'XML_CAMT054' | 'JSON_PAYMENTS' | 'QUICKBOOKS_IIF';
+
+export interface ETLBatch {
+  id: string;
+  name: string;
+  format: ETLFormat;
+  status: BatchStatus;
+  reconciliationIds: string[];
+  reconciliationNames: string[];
+  totalTransactionsCount: number;
+  totalInvoicesCount: number;
+  totalAmount: number;
+  currency: string;
+  createdBy: string;
+  createdAt: string;
+  lastModified: string;
+  notes?: string;
+  exportDestination?: string;
+  fileSize?: string;
+  postingDate?: string;
+}
