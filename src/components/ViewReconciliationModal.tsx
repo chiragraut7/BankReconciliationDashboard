@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   Building2, 
@@ -13,6 +13,7 @@ import {
   Search,
   Check,
   Eye,
+  EyeOff,
   ShieldCheck,
   Split,
   Maximize2,
@@ -45,6 +46,24 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
   const [selectedPdfTxnRef, setSelectedPdfTxnRef] = useState<string | null>(null);
   const [isPdfDropdownOpen, setIsPdfDropdownOpen] = useState<boolean>(false);
 
+  const filteredTransactions = useMemo(() => {
+    if (!run || !run.transactions) return [];
+    return [...run.transactions]
+      .filter(txn => {
+        const q = searchTerm.toLowerCase();
+        return (
+          txn.reference.toLowerCase().includes(q) ||
+          txn.description.toLowerCase().includes(q) ||
+          txn.bookingDate.toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const aMatched = a.matchedInvoiceIds.length > 0 ? 1 : 0;
+        const bMatched = b.matchedInvoiceIds.length > 0 ? 1 : 0;
+        return bMatched - aMatched; // Reconciled on top
+      });
+  }, [run, searchTerm]);
+
   if (!isOpen || !run) return null;
 
   const toggleAccordion = (txnId: string) => {
@@ -66,15 +85,6 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
   const collapseAll = () => {
     setExpandedTxnIds(new Set());
   };
-
-  const filteredTransactions = run.transactions.filter(txn => {
-    const q = searchTerm.toLowerCase();
-    return (
-      txn.reference.toLowerCase().includes(q) ||
-      txn.description.toLowerCase().includes(q) ||
-      txn.bookingDate.toLowerCase().includes(q)
-    );
-  });
 
   return (
     <div className="fixed inset-0 z-50 p-5 bg-black/60 backdrop-blur-xs flex items-center justify-center animate-in fade-in duration-150 font-sans">
@@ -106,7 +116,7 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
           </div>
 
           <div className="flex items-center gap-2">
-            {/* DIRECT VIEW PDF IN TARGET BLANK BUTTON */}
+            {/* DIRECT VIEW BANK STATEMENT IN TARGET BLANK BUTTON */}
             <button
               type="button"
               onClick={() => {
@@ -121,10 +131,10 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                 });
               }}
               className="px-3 py-1.5 bg-white hover:bg-orange-50 text-[#EA580C] border border-orange-300 rounded-md text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
-              title="View PDF Statement in new tab (target _blank)"
+              title="View Bank Statement in new tab (target _blank)"
             >
               <ExternalLink className="w-3.5 h-3.5 text-[#EA580C]" />
-              <span>View PDF</span>
+              <span>View Bank Statement</span>
             </button>
 
             <button
@@ -204,13 +214,17 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                   }}
                   className={`px-2.5 py-1 text-xs font-bold rounded-md flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs border ${
                     pdfViewMode === 'split'
-                      ? 'bg-orange-100 text-[#EA580C] border-orange-300'
+                      ? 'bg-orange-50 text-[#EA580C] border-orange-300 hover:bg-orange-100'
                       : 'bg-white text-gray-700 hover:text-gray-900 border-gray-300 hover:bg-gray-50'
                   }`}
-                  title="Toggle Instant Split PDF View"
+                  title={pdfViewMode === 'split' ? 'Hide Bank Statement' : 'Show Bank Statement'}
                 >
-                  <Split className="w-3.5 h-3.5 text-[#EA580C]" />
-                  <span>{pdfViewMode === 'split' ? 'Close Split PDF' : 'Instant Split PDF'}</span>
+                  {pdfViewMode === 'split' ? (
+                    <EyeOff className="w-3.5 h-3.5 text-[#EA580C]" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 text-[#EA580C]" />
+                  )}
+                  <span>{pdfViewMode === 'split' ? 'Hide Bank Statement' : 'Show Bank Statement'}</span>
                 </button>
 
                 <button
@@ -258,6 +272,7 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                         <th className="py-2.5 px-4">Reference</th>
                         <th className="py-2.5 px-4">Description</th>
                         <th className="py-2.5 px-4 text-right">Amount</th>
+                        <th className="py-2.5 px-4">Matched Invoices</th>
                         <th className="py-2.5 px-4 text-center">Match Status</th>
                       </tr>
                     </thead>
@@ -267,10 +282,10 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                         const isMatched = txn.matchedInvoiceIds.length > 0;
                         const isSelectedPdf = selectedPdfTxnRef === txn.reference;
 
-                        // Match invoices lookup
-                        const matchedInvoicesForTxn = (run.invoices || []).filter(inv =>
-                          txn.matchedInvoiceIds.includes(inv.id)
-                        );
+                        // Match invoices lookup preserving matched order
+                        const matchedInvoicesForTxn = txn.matchedInvoiceIds
+                          .map(id => (run.invoices || []).find(inv => inv.id === id))
+                          .filter((inv): inv is MatchedInvoice => !!inv);
                         const totalMatchedAmount = matchedInvoicesForTxn.reduce((sum, inv) => sum + inv.amount, 0);
                         const variance = Math.abs(txn.amount - totalMatchedAmount);
 
@@ -328,6 +343,26 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                                 {formatCurrency(txn.amount)}
                               </td>
 
+                              {/* Matched Invoices */}
+                              <td className="py-3 px-4">
+                                {isMatched ? (
+                                  <div className="flex flex-wrap items-center gap-1 max-w-[220px]">
+                                    {matchedInvoicesForTxn.map((inv) => (
+                                      <span 
+                                        key={inv.id}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-900 border border-emerald-200 shrink-0"
+                                        title={`${inv.invoiceNumber} • ${inv.entityName} (${formatCurrency(inv.amount)})`}
+                                      >
+                                        <FileText className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                                        <span>{inv.invoiceNumber}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-gray-400 italic">None</span>
+                                )}
+                              </td>
+
                               {/* Match Status */}
                               <td className="py-3 px-4 text-center whitespace-nowrap">
                                 <div className="flex items-center justify-center gap-1.5">
@@ -353,7 +388,7 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
                             {/* 19. STATEMENT ACCORDION DETAILS (Expanded state) */}
                             {isExpanded && (
                               <tr className="bg-[#FFF8F3] border-b-2 border-orange-200/80">
-                                <td colSpan={5} className="p-4 pl-6">
+                                <td colSpan={6} className="p-4 pl-6">
                                   <div className="bg-white border border-orange-200/90 rounded-xl p-4 shadow-sm space-y-3 ring-1 ring-orange-100/80">
                                     <div className="flex items-center justify-between border-b border-orange-100 pb-2.5">
                                       <div className="flex items-center gap-2">
@@ -423,7 +458,7 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
 
               {/* OPTION 1: INSTANT SPLIT PDF VIEW PANEL */}
               {pdfViewMode === 'split' && (
-                <div className="lg:col-span-5 h-[650px] bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md flex flex-col animate-in fade-in zoom-in-95 duration-150">
+                <div className="lg:col-span-5 sticky top-16 z-10 self-start h-[650px] bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md flex flex-col animate-in fade-in zoom-in-95 duration-150">
                   <PdfStatementViewer
                     fileName={run.statementFileName}
                     bankName={run.bankName}

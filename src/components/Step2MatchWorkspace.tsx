@@ -513,7 +513,9 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                 {filteredTransactions.map((txn) => {
                   const isExpanded = expandedTxnIds.has(txn.id);
                   const isSelected = selectedTxnIds.has(txn.id);
-                  const matchedInvs = invoices.filter(inv => txn.matchedInvoiceIds.includes(inv.id));
+                  const matchedInvs = txn.matchedInvoiceIds
+                    .map(id => invoices.find(inv => inv.id === id))
+                    .filter((inv): inv is MatchedInvoice => !!inv);
                   const isMulti = txn.status === 'Multi-Invoice' || matchedInvs.length > 1;
 
                   return (

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   X, 
   UploadCloud, 
@@ -28,7 +28,8 @@ import {
   Loader2,
   Cpu,
   Zap,
-  FileCheck
+  FileCheck,
+  EyeOff
 } from 'lucide-react';
 import { 
   BankTransaction, 
@@ -93,6 +94,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
       setTransactions(INITIAL_TRANSACTIONS);
       setInvoices(INITIAL_INVOICES);
       setExpandedTxnIds(new Set(['TXN-10021', 'TXN-10025']));
+      setReconciledTxnTimestamps({});
       setPendingMatch(null);
       setTxnSearch('');
       setInvoiceSearch('');
@@ -113,12 +115,31 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
     new Set(['TXN-10021', 'TXN-10025'])
   );
 
+  // Timestamps to track and sort newly reconciled/matched transactions to the top
+  const [reconciledTxnTimestamps, setReconciledTxnTimestamps] = useState<Record<string, number>>({});
+
   // Drag & drop state for invoice matching
   const [draggedInvoices, setDraggedInvoices] = useState<MatchedInvoice[]>([]);
   const [dragOverTxnId, setDragOverTxnId] = useState<string | null>(null);
 
   // Pending Match confirmation popup / drawer
   const [pendingMatch, setPendingMatch] = useState<PendingMatch | null>(null);
+  const confirmSectionRef = useRef<HTMLDivElement>(null);
+  const workspaceScrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to confirmation section when invoice is dropped / pending match appears
+  useEffect(() => {
+    if (pendingMatch) {
+      const timer = setTimeout(() => {
+        if (confirmSectionRef.current) {
+          confirmSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (workspaceScrollRef.current) {
+          workspaceScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingMatch]);
 
   // Search & Filters in workspace
   const [txnSearch, setTxnSearch] = useState('');
@@ -229,11 +250,15 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
     setTransactions(prevTxns =>
       prevTxns.map(t => {
         if (t.id === txnId) {
-          const updatedMatchedIds = Array.from(new Set([...t.matchedInvoiceIds, ...droppedIds]));
+          // Prepend newly dropped invoice IDs so they display first in the matched list
+          const updatedMatchedIds = [
+            ...droppedIds,
+            ...t.matchedInvoiceIds.filter(id => !droppedIds.includes(id))
+          ];
           // Calculate sum of all matched invoices
-          const allMatchedInvoices = invoices.filter(inv => 
-            updatedMatchedIds.includes(inv.id) || droppedIds.includes(inv.id)
-          );
+          const allMatchedInvoices = updatedMatchedIds
+            .map(id => invoices.find(inv => inv.id === id) || droppedInvs.find(inv => inv.id === id))
+            .filter((inv): inv is MatchedInvoice => !!inv);
           const totalMatchedAmount = allMatchedInvoices.reduce((sum, inv) => sum + inv.amount, 0);
           const variance = Math.abs(t.amount - totalMatchedAmount);
 
@@ -244,8 +269,8 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
             matchConfidence: 100,
             variance: variance,
             matchReasons: [
-              ...t.matchReasons.filter(r => !r.includes('Match')),
-              ...droppedInvs.map(inv => `Matched with Invoice ${inv.invoiceNumber} (${formatCurrency(inv.amount)})`)
+              ...droppedInvs.map(inv => `Matched with Invoice ${inv.invoiceNumber} (${formatCurrency(inv.amount)})`),
+              ...t.matchReasons.filter(r => !r.includes('Match'))
             ]
           };
         }
@@ -277,6 +302,11 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
 
     // Automatically expand accordion for this transaction
     setExpandedTxnIds(prev => new Set([...prev, txnId]));
+    // Top this transaction after reconciliation
+    setReconciledTxnTimestamps(prev => ({
+      ...prev,
+      [txnId]: Date.now()
+    }));
     setPendingMatch(null);
   };
 
@@ -311,6 +341,14 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
           const totalMatched = remainingInvoices.reduce((sum, inv) => sum + inv.amount, 0);
           const variance = Math.abs(t.amount - totalMatched);
 
+          if (nextMatchedIds.length === 0) {
+            setReconciledTxnTimestamps(prev => {
+              const copy = { ...prev };
+              delete copy[txnId];
+              return copy;
+            });
+          }
+
           return {
             ...t,
             matchedInvoiceIds: nextMatchedIds,
@@ -344,13 +382,16 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
     setIsDirty(true);
     // Link matching amounts
     let currentInvs = [...invoices];
-    const newTxns = transactions.map(txn => {
+    const now = Date.now();
+    const newTimestamps: Record<string, number> = {};
+    const newTxns = transactions.map((txn, index) => {
       if (txn.matchedInvoiceIds.length > 0) return txn;
       const matchingInv = currentInvs.find(inv => !inv.matchedBankTxnId && inv.amount === txn.amount);
       if (matchingInv) {
         matchingInv.matchedBankTxnId = txn.id;
         matchingInv.status = 'Exact Match';
         matchingInv.matchConfidence = 100;
+        newTimestamps[txn.id] = now + index;
         return {
           ...txn,
           matchedInvoiceIds: [matchingInv.id],
@@ -362,6 +403,9 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
       return txn;
     });
 
+    if (Object.keys(newTimestamps).length > 0) {
+      setReconciledTxnTimestamps(prev => ({ ...prev, ...newTimestamps }));
+    }
     setTransactions(newTxns);
     setInvoices(currentInvs);
   };
@@ -470,7 +514,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
     .reduce((sum, t) => sum + t.amount, 0);
   const totalVariance = Math.abs(statementTotalAmount - matchedTotalAmount);
 
-  // Filtered views: Unmatched ("Drop Invoice" targets) on top, Matched placed at the end
+  // Filtered views: Reconciled/Matched on top, with newly reconciled at the very top
   const filteredTransactions = useMemo(() => {
     return [...transactions]
       .filter(t => {
@@ -485,9 +529,19 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
       .sort((a, b) => {
         const aMatched = a.matchedInvoiceIds.length > 0 ? 1 : 0;
         const bMatched = b.matchedInvoiceIds.length > 0 ? 1 : 0;
-        return aMatched - bMatched; // 0 (unmatched) on top, 1 (matched) at the end
+        // 1 (reconciled/matched) on top, 0 (unmatched) at the bottom
+        if (aMatched !== bMatched) {
+          return bMatched - aMatched;
+        }
+        // If both are matched, prioritize recently reconciled transaction at the very top
+        const aTime = reconciledTxnTimestamps[a.id] || 0;
+        const bTime = reconciledTxnTimestamps[b.id] || 0;
+        if (aTime !== bTime) {
+          return bTime - aTime;
+        }
+        return 0;
       });
-  }, [transactions, txnSearch]);
+  }, [transactions, txnSearch, reconciledTxnTimestamps]);
 
   const filteredInvoices = invoices.filter(inv => {
     if (invoiceFilter === 'unmatched' && inv.matchedBankTxnId) return false;
@@ -565,7 +619,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
             </div>
             <div>
               <h2 className="text-base font-bold text-gray-900 tracking-tight">
-                Add New Reconciliation
+                Reconciliation
               </h2>
               <p className="text-[11px] text-gray-500">
                 Configure statement period, upload statement file, and drag invoices to reconcile transactions.
@@ -584,7 +638,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
         </div>
 
       {/* Modal Scrollable Workspace */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-[#F6F8FA]">
+      <div ref={workspaceScrollRef} className="flex-1 overflow-y-auto p-6 space-y-5 bg-[#F6F8FA] scroll-smooth">
         <div className="max-w-[1700px] mx-auto space-y-5">
           {/* 4. RECONCILIATION INFORMATION & 5. STATEMENT UPLOAD */}
           {uploadedFile ? (
@@ -665,10 +719,10 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
           ) : (
             /* Full expanded form before file upload */
             <>
-              {/* 4. RECONCILIATION INFORMATION */}
+              {/* 4. STATEMENT INFORMATION */}
               <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 <div className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <span>Reconciliation Information</span>
+                  <span>Statement Information</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -845,7 +899,10 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                 const variance = Math.abs(pendingMatch.txn.amount - totalDroppedAmount);
 
                 return (
-                  <div className="bg-orange-50/95 border-2 border-[#EA580C] rounded-xl p-4 shadow-lg animate-in zoom-in-95 duration-150 space-y-3">
+                  <div 
+                    ref={confirmSectionRef}
+                    className="bg-orange-50/95 border-2 border-[#EA580C] rounded-xl p-4 shadow-lg animate-in zoom-in-95 duration-150 space-y-3 ring-4 ring-orange-200/50 scroll-mt-6"
+                  >
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-orange-200 pb-3">
                       <div className="flex items-center gap-2.5">
                         <div className="p-1.5 bg-[#EA580C] text-white rounded-md shadow-2xs">
@@ -947,7 +1004,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
             {/* 6. LEFT SIDE: Bank Statement */}
             <div className={`${pdfViewMode === 'split' ? 'lg:col-span-6' : 'lg:col-span-7'} bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs flex flex-col transition-all duration-200`}>
               {/* Header */}
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+              <div className="sticky top-0 z-20 px-4 py-3 bg-gray-50/95 backdrop-blur-xs border-b border-gray-200 flex flex-wrap items-center justify-between gap-2 shadow-xs">
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-[#EA580C]" />
                   <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
@@ -959,7 +1016,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Option 1 Split PDF quick toggle button */}
+                  {/* Option 1 Split Bank Statement quick toggle button */}
                   <button
                     type="button"
                     onClick={() => {
@@ -970,13 +1027,17 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                     }}
                     className={`px-2.5 py-1 text-xs font-bold rounded-md flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs border ${
                       pdfViewMode === 'split'
-                        ? 'bg-orange-100 text-[#EA580C] border-orange-300'
+                        ? 'bg-orange-50 text-[#EA580C] border-orange-300 hover:bg-orange-100'
                         : 'bg-white text-gray-700 hover:text-gray-900 border-gray-300 hover:bg-gray-50'
                     }`}
-                    title="Toggle Option 1: Instant Split PDF View (Hides Invoices, Synced with selected line)"
+                    title={pdfViewMode === 'split' ? 'Hide Bank Statement' : 'Show Bank Statement'}
                   >
-                    <Split className="w-3.5 h-3.5 text-[#EA580C]" />
-                    <span>{pdfViewMode === 'split' ? 'Show Invoices' : 'Split PDF'}</span>
+                    {pdfViewMode === 'split' ? (
+                      <EyeOff className="w-3.5 h-3.5 text-[#EA580C]" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5 text-[#EA580C]" />
+                    )}
+                    <span>{pdfViewMode === 'split' ? 'Hide Bank Statement' : 'Show Bank Statement'}</span>
                   </button>
 
                   <div className="relative max-w-[140px] sm:max-w-[160px]">
@@ -1001,6 +1062,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                       <th className="py-2.5 px-3">Reference</th>
                       <th className="py-2.5 px-3">Description</th>
                       <th className="py-2.5 px-3 text-right">Amount</th>
+                      <th className="py-2.5 px-3">Matched Invoices</th>
                       <th className="py-2.5 px-3 text-center">Status</th>
                     </tr>
                   </thead>
@@ -1010,10 +1072,10 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                       const isMatched = txn.matchedInvoiceIds.length > 0;
                       const isDropTarget = dragOverTxnId === txn.id;
 
-                      // Find matched invoice objects
-                      const matchedInvoicesForTxn = invoices.filter(inv => 
-                        txn.matchedInvoiceIds.includes(inv.id)
-                      );
+                      // Find matched invoice objects preserving matched order (dropped invoice first)
+                      const matchedInvoicesForTxn = txn.matchedInvoiceIds
+                        .map(id => invoices.find(inv => inv.id === id))
+                        .filter((inv): inv is MatchedInvoice => !!inv);
                       const totalMatchedAmount = matchedInvoicesForTxn.reduce((sum, inv) => sum + inv.amount, 0);
                       const variance = Math.abs(txn.amount - totalMatchedAmount);
 
@@ -1076,6 +1138,26 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                               {formatCurrency(txn.amount)}
                             </td>
 
+                            {/* Matched Invoices */}
+                            <td className="py-2.5 px-3">
+                              {isMatched ? (
+                                <div className="flex flex-wrap items-center gap-1 max-w-[200px]">
+                                  {matchedInvoicesForTxn.map((inv) => (
+                                    <span 
+                                      key={inv.id}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-900 border border-emerald-200 shrink-0"
+                                      title={`${inv.invoiceNumber} • ${inv.entityName} (${formatCurrency(inv.amount)})`}
+                                    >
+                                      <FileText className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                                      <span>{inv.invoiceNumber}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-gray-400 italic">None</span>
+                              )}
+                            </td>
+
                             {/* Status & Accordion Toggle Icon */}
                             <td className="py-2.5 px-3 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center gap-1.5">
@@ -1106,7 +1188,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
                           {/* 9 & 10. MATCHED INVOICE ACCORDION (Expanded state directly under row) */}
                           {isExpanded && (
                             <tr className="bg-[#FFF8F3] border-b-2 border-orange-200/80">
-                              <td colSpan={5} className="p-3.5 pl-5">
+                              <td colSpan={6} className="p-3.5 pl-5">
                                 <div className="bg-white border border-orange-200/90 rounded-xl p-3.5 shadow-sm space-y-2.5 ring-1 ring-orange-100/80">
                                   {isMatched ? (
                                     <>
@@ -1192,7 +1274,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
 
             {/* OPTION 1: INSTANT SPLIT PDF VIEW PANEL (Replaces Invoices section when Split mode is active) */}
             {pdfViewMode === 'split' ? (
-              <div className="lg:col-span-6 h-[620px] bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md flex flex-col animate-in fade-in zoom-in-95 duration-150">
+              <div className="lg:col-span-6 sticky top-16 z-10 self-start h-[620px] bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md flex flex-col animate-in fade-in zoom-in-95 duration-150">
                 <PdfStatementViewer
                   fileName={uploadedFile ? uploadedFile.name : 'HSBC_August_2026.pdf'}
                   bankName={currentBank.bankName}
@@ -1209,7 +1291,7 @@ export const AddNewReconciliationModal: React.FC<AddNewReconciliationModalProps>
               </div>
             ) : (
               /* 7. RIGHT SIDE: Invoices List (Shown when PDF is hidden) */
-              <div className="lg:col-span-5 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs flex flex-col transition-all duration-200">
+              <div className="lg:col-span-5 sticky top-16 z-10 self-start bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs flex flex-col transition-all duration-200">
                 {/* Header */}
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 shrink-0">

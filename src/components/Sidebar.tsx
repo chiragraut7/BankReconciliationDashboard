@@ -6,11 +6,9 @@ import {
   BookOpen,
   BarChart3,
   Settings,
-  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   History,
-  CheckCircle2,
   FolderOpen
 } from 'lucide-react';
 
@@ -152,34 +150,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
-      </div>
-
-      {/* Bottom Status & System Health */}
-      <div className="p-3 border-t border-gray-100 bg-gray-50/50">
-        {!isCollapsed ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-gray-500">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Auto-Sync Live
-              </span>
-              <span className="font-mono text-[10px] text-gray-400">v2.4.0</span>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-2.5 text-xs shadow-2xs">
-              <div className="flex items-center gap-1.5 text-gray-900 font-bold text-[11px]">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Audit Verified</span>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">
-                All ledger entries encrypted & certified.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex justify-center" title="Auto-Sync Live: v2.4.0">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          </div>
-        )}
       </div>
     </aside>
   );

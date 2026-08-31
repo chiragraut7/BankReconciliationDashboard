@@ -96,7 +96,7 @@ export default function App() {
               </p>
             </div>
 
-            {/* Top-Right Primary Button: [ + Add New Reconciliation ] */}
+            {/* Top-Right Primary Button: [ + Add new bank statement ] */}
             <div>
               <button
                 type="button"
@@ -104,7 +104,7 @@ export default function App() {
                 className="w-full sm:w-auto bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add New Reconciliation</span>
+                <span>Add new bank statement</span>
               </button>
             </div>
           </div>

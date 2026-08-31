@@ -27,11 +27,18 @@ export const ReconciliationListTable: React.FC<ReconciliationListTableProps> = (
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Locked' | 'Saved'>('All');
-  const [sortField, setSortField] = useState<'id' | 'reconciliationDate' | 'bankName' | 'totalAmount'>('id');
+  const [sortField, setSortField] = useState<'id' | 'reconciliationDate' | 'bankName' | 'totalAmount' | 'invoiceReconciliation'>('id');
   const [sortAsc, setSortAsc] = useState(false);
   const [entriesPerPage, setEntriesPerPage] = useState<number>(15);
 
-  const handleSort = (field: 'id' | 'reconciliationDate' | 'bankName' | 'totalAmount') => {
+  const getInvoiceStats = (run: ReconciliationRun) => {
+    const total = run.invoicesTotalCount ?? (run.invoices?.length || 20);
+    const reconciled = run.invoicesReconciledCount ?? (run.invoices?.filter(inv => inv.matchedBankTxnId).length || run.matchedCount || 0);
+    const percentage = total > 0 ? Math.round((reconciled / total) * 100) : 100;
+    return { total, reconciled, percentage };
+  };
+
+  const handleSort = (field: 'id' | 'reconciliationDate' | 'bankName' | 'totalAmount' | 'invoiceReconciliation') => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
     } else {
@@ -62,6 +69,10 @@ export const ReconciliationListTable: React.FC<ReconciliationListTableProps> = (
         comparison = a.bankName.localeCompare(b.bankName);
       } else if (sortField === 'totalAmount') {
         comparison = a.totalAmount - b.totalAmount;
+      } else if (sortField === 'invoiceReconciliation') {
+        const statsA = getInvoiceStats(a);
+        const statsB = getInvoiceStats(b);
+        comparison = statsA.percentage - statsB.percentage;
       }
       return sortAsc ? comparison : -comparison;
     });
@@ -154,15 +165,21 @@ export const ReconciliationListTable: React.FC<ReconciliationListTableProps> = (
                     <ArrowUpDown className="w-3 h-3 text-gray-400" />
                   </div>
                 </th>
-                <th className="py-3 px-4">
-                  <span>Invoice Reconciliation</span>
-                </th>
                 <th 
                   onClick={() => handleSort('totalAmount')} 
                   className="py-3 px-4 text-right cursor-pointer hover:text-gray-900 transition-colors"
                 >
                   <div className="flex items-center justify-end gap-1.5">
                     <span>Reconciliation Amount</span>
+                    <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('invoiceReconciliation')} 
+                  className="py-3 px-4 cursor-pointer hover:text-gray-900 transition-colors min-w-[190px]"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Invoice Reconciliation</span>
                     <ArrowUpDown className="w-3 h-3 text-gray-400" />
                   </div>
                 </th>
@@ -176,11 +193,7 @@ export const ReconciliationListTable: React.FC<ReconciliationListTableProps> = (
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredRuns.slice(0, entriesPerPage).map((run) => {
-                const totalInvoices = run.invoicesTotalCount || 22;
-                const matchedInvoices = run.invoicesReconciledCount ?? run.matchedCount ?? 18;
-                const isFullyMatched = matchedInvoices >= totalInvoices;
-                const percent = Math.min(100, Math.round((matchedInvoices / totalInvoices) * 100));
-
+                const stats = getInvoiceStats(run);
                 return (
                   <tr 
                     key={run.id}
@@ -219,34 +232,33 @@ export const ReconciliationListTable: React.FC<ReconciliationListTableProps> = (
                       </div>
                     </td>
 
-                    {/* D. Invoice Reconciliation (e.g. 18 / 22 Matched) */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3 max-w-[200px]">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="font-semibold text-gray-900">
-                              {matchedInvoices} / {totalInvoices} Matched
-                            </span>
-                            <span className={`text-[11px] font-mono font-bold ${isFullyMatched ? 'text-emerald-700' : 'text-[#EA580C]'}`}>
-                              {percent}%
-                            </span>
-                          </div>
-                          {/* Progress bar */}
-                          <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full transition-all duration-300 ${
-                                isFullyMatched ? 'bg-emerald-600' : 'bg-[#EA580C]'
-                              }`}
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* E. Reconciliation Amount */}
+                    {/* D. Reconciliation Amount */}
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-gray-900 text-sm">
                       {formatCurrency(run.totalAmount, run.currency || 'USD')}
+                    </td>
+
+                    {/* E. Invoice Reconciliation Progress */}
+                    <td className="py-3.5 px-4 min-w-[190px]">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-gray-900">
+                            {stats.reconciled} / {stats.total} Matched
+                          </span>
+                          <span className={`font-bold font-mono text-[11px] ${
+                            stats.percentage === 100 ? 'text-emerald-600' : 'text-[#EA580C]'
+                          }`}>
+                            {stats.percentage}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              stats.percentage === 100 ? 'bg-emerald-600' : 'bg-[#EA580C]'
+                            }`} 
+                            style={{ width: `${stats.percentage}%` }} 
+                          />
+                        </div>
+                      </div>
                     </td>
 
                     {/* Status Badge */}
