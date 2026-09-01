@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, HelpCircle, X, Layers, FileSpreadsheet } from 'lucide-react';
-import { ReconciliationRun, ETLBatch } from './types/reconciliation';
-import { INITIAL_RECONCILIATION_RUNS, INITIAL_ETL_BATCHES } from './data/mockData';
+import { Plus, HelpCircle, X } from 'lucide-react';
+import { ReconciliationRun, ETLBatch, InvoiceBatch } from './types/reconciliation';
+import { INITIAL_RECONCILIATION_RUNS, INITIAL_ETL_BATCHES, INITIAL_INVOICE_BATCHES } from './data/mockData';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ReconciliationListTable } from './components/ReconciliationListTable';
@@ -12,15 +12,21 @@ import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { EtlBatchesTable } from './components/EtlBatchesTable';
 import { CreateBatchModal } from './components/CreateBatchModal';
 import { ViewBatchDetailsModal } from './components/ViewBatchDetailsModal';
+import { InvoiceBatchesTable } from './components/InvoiceBatchesTable';
+import { CreateInvoiceBatchModal } from './components/CreateInvoiceBatchModal';
+import { ViewInvoiceBatchDetailsModal } from './components/ViewInvoiceBatchDetailsModal';
 
 export default function App() {
   // Master state for all reconciliation records
   const [runs, setRuns] = useState<ReconciliationRun[]>(INITIAL_RECONCILIATION_RUNS);
   
-  // Master state for ETL batches
+  // Master state for ETL batches (Bank Statement Batches)
   const [batches, setBatches] = useState<ETLBatch[]>(INITIAL_ETL_BATCHES);
+
+  // Master state for Invoice Batches
+  const [invoiceBatches, setInvoiceBatches] = useState<InvoiceBatch[]>(INITIAL_INVOICE_BATCHES);
   
-  // Navigation tab: 'reconciliations' | 'batches' | other sidebar tabs
+  // Navigation tab: 'reconciliations' | 'batches' | 'invoice_batches' | other sidebar tabs
   const [activeNavTab, setActiveNavTab] = useState<string>('reconciliations');
 
   // Modal states for Reconciliations
@@ -29,9 +35,13 @@ export default function App() {
   const [pdfViewingRun, setPdfViewingRun] = useState<ReconciliationRun | null>(null);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
 
-  // Modal states for ETL Batches
+  // Modal states for ETL Batches (Bank)
   const [isCreateBatchModalOpen, setIsCreateBatchModalOpen] = useState<boolean>(false);
   const [viewingBatch, setViewingBatch] = useState<ETLBatch | null>(null);
+
+  // Modal states for Invoice Batches
+  const [isCreateInvoiceBatchModalOpen, setIsCreateInvoiceBatchModalOpen] = useState<boolean>(false);
+  const [viewingInvoiceBatch, setViewingInvoiceBatch] = useState<InvoiceBatch | null>(null);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -47,12 +57,18 @@ export default function App() {
         e.preventDefault();
         if (activeNavTab === 'batches') {
           setIsCreateBatchModalOpen(true);
+        } else if (activeNavTab === 'invoice_batches') {
+          setIsCreateInvoiceBatchModalOpen(true);
         } else {
           setIsAddModalOpen(true);
         }
       } else if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
-        setIsCreateBatchModalOpen(true);
+        if (activeNavTab === 'invoice_batches') {
+          setIsCreateInvoiceBatchModalOpen(true);
+        } else {
+          setIsCreateBatchModalOpen(true);
+        }
       } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setIsShortcutsOpen(prev => !prev);
@@ -63,6 +79,8 @@ export default function App() {
         setIsShortcutsOpen(false);
         setIsCreateBatchModalOpen(false);
         setViewingBatch(null);
+        setIsCreateInvoiceBatchModalOpen(false);
+        setViewingInvoiceBatch(null);
       }
     };
 
@@ -85,7 +103,7 @@ export default function App() {
     setPdfViewingRun(run);
   };
 
-  // Handler to create new ETL batch
+  // Handler to create new ETL batch (Bank)
   const handleCreateBatch = (newBatch: ETLBatch) => {
     setBatches(prev => [newBatch, ...prev]);
     setActiveNavTab('batches');
@@ -104,6 +122,23 @@ export default function App() {
     alert(`Batch ${batch.id} (${batch.name}) successfully queued for transmission to ${batch.exportDestination || 'SAP General Ledger Feed'}.`);
   };
 
+  // Handlers for Invoice Batches
+  const handleCreateInvoiceBatch = (newBatch: InvoiceBatch) => {
+    setInvoiceBatches(prev => [newBatch, ...prev]);
+    setActiveNavTab('invoice_batches');
+  };
+
+  const handleDeleteInvoiceBatch = (batchId: string) => {
+    if (confirm('Are you sure you want to delete this Invoice batch?')) {
+      setInvoiceBatches(prev => prev.filter(b => b.id !== batchId));
+    }
+  };
+
+  const handleExportInvoiceBatch = (batch: InvoiceBatch) => {
+    setInvoiceBatches(prev => prev.map(b => b.id === batch.id ? { ...b, status: 'Exported', lastModified: 'Just now' } : b));
+    alert(`Invoice Batch ${batch.id} (${batch.name}) successfully queued for transmission to ${batch.exportDestination || 'AP/AR Feed'}.`);
+  };
+
   return (
     <div className="min-h-screen bg-[#FBFBFB] text-[#1E293B] flex flex-col font-sans selection:bg-[#EA580C] selection:text-white">
       {/* Top Header Bar for 4see PRO */}
@@ -117,13 +152,59 @@ export default function App() {
           onSelectTab={setActiveNavTab}
           reconciliationCount={runs.length}
           batchCount={batches.length}
+          invoiceBatchCount={invoiceBatches.length}
         />
 
         {/* Main 100% Full-Width Workspace */}
         <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-y-auto bg-[#F6F8FA]">
-          {activeNavTab === 'batches' ? (
+          {activeNavTab === 'invoice_batches' ? (
             /* ========================================================================= */
-            /* ETL BATCHES WORKSPACE SCREEN                                              */
+            /* INVOICE BATCHES WORKSPACE SCREEN                                          */
+            /* ========================================================================= */
+            <>
+              {/* 1. MAIN PAGE TITLE & TOP ACTION BAR FOR INVOICE BATCHES */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight uppercase font-['Open_Sans',sans-serif]">
+                      INVOICE BATCH
+                    </h1>
+                    <span className="bg-orange-100 text-[#EA580C] text-xs font-bold px-2.5 py-0.5 rounded-full border border-orange-200 font-mono">
+                      {invoiceBatches.length} Batches
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-gray-500 mt-1 font-normal">
+                    Generate, review, and export structured invoice batches derived from reconciled customer & vendor invoices.
+                  </p>
+                </div>
+
+                {/* Top-Right Primary Button: [ + Create new Invoice Batch ] */}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateInvoiceBatchModalOpen(true)}
+                    className="w-full sm:w-auto bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Create new Invoice Batch</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. INVOICE BATCHES LIST TABLE (100% Width) */}
+              <div className="w-full">
+                <InvoiceBatchesTable
+                  batches={invoiceBatches}
+                  onCreateNewBatch={() => setIsCreateInvoiceBatchModalOpen(true)}
+                  onViewBatch={(batch) => setViewingInvoiceBatch(batch)}
+                  onDeleteBatch={handleDeleteInvoiceBatch}
+                  onExportBatch={handleExportInvoiceBatch}
+                />
+              </div>
+            </>
+          ) : activeNavTab === 'batches' ? (
+            /* ========================================================================= */
+            /* ETL BATCHES (BANK STATEMENT) WORKSPACE SCREEN                             */
             /* ========================================================================= */
             <>
               {/* 1. MAIN PAGE TITLE & TOP ACTION BAR FOR BATCHES */}
@@ -144,15 +225,6 @@ export default function App() {
 
                 {/* Top-Right Primary Button: [ + Create new Batch ] */}
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setActiveNavTab('reconciliations')}
-                    className="px-3.5 py-2.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <FileSpreadsheet className="w-4 h-4 text-gray-500" />
-                    <span>View Reconciliations</span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => setIsCreateBatchModalOpen(true)}
@@ -200,16 +272,6 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setIsCreateBatchModalOpen(true)}
-                    className="px-4 py-2.5 text-xs font-bold text-[#EA580C] bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                    title="Create an ETL batch from reconciled statements"
-                  >
-                    <Layers className="w-4 h-4 text-[#EA580C]" />
-                    <span>Create ETL Batch</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={() => setIsAddModalOpen(true)}
                     className="w-full sm:w-auto bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
                   >
@@ -247,7 +309,7 @@ export default function App() {
         onViewPdf={handleViewPdf}
       />
 
-      {/* FULL SCREEN CREATE NEW BATCH MODAL */}
+      {/* FULL SCREEN CREATE NEW BANK BATCH MODAL */}
       <CreateBatchModal
         isOpen={isCreateBatchModalOpen}
         onClose={() => setIsCreateBatchModalOpen(false)}
@@ -255,13 +317,30 @@ export default function App() {
         onCreateBatch={handleCreateBatch}
       />
 
-      {/* VIEW BATCH DETAILS & ETL STREAM MODAL */}
+      {/* VIEW BANK BATCH DETAILS & ETL STREAM MODAL */}
       <ViewBatchDetailsModal
         isOpen={!!viewingBatch}
         onClose={() => setViewingBatch(null)}
         batch={viewingBatch}
         reconciliationRuns={runs}
         onExportToErp={handleExportBatch}
+      />
+
+      {/* FULL SCREEN CREATE NEW INVOICE BATCH MODAL */}
+      <CreateInvoiceBatchModal
+        isOpen={isCreateInvoiceBatchModalOpen}
+        onClose={() => setIsCreateInvoiceBatchModalOpen(false)}
+        reconciliationRuns={runs}
+        onCreateBatch={handleCreateInvoiceBatch}
+      />
+
+      {/* VIEW INVOICE BATCH DETAILS & STREAM MODAL */}
+      <ViewInvoiceBatchDetailsModal
+        isOpen={!!viewingInvoiceBatch}
+        onClose={() => setViewingInvoiceBatch(null)}
+        batch={viewingInvoiceBatch}
+        reconciliationRuns={runs}
+        onExportToErp={handleExportInvoiceBatch}
       />
 
       {/* Standalone PDF Statement Viewer Modal */}
@@ -308,3 +387,4 @@ export default function App() {
     </div>
   );
 }
+

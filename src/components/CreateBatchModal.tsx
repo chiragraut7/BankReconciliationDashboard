@@ -531,6 +531,9 @@ ${selectedTransactions.map(txn =>
                         {/* DATE */}
                         <th className="py-2 px-3 min-w-[100px]">Date</th>
 
+                        {/* BANK NAME */}
+                        <th className="py-2 px-3 min-w-[140px]">Bank Name</th>
+
                         {/* REFERENCE */}
                         <th className="py-2 px-3 min-w-[130px]">Reference</th>
 
@@ -542,9 +545,6 @@ ${selectedTransactions.map(txn =>
 
                         {/* MATCHED INVOICES */}
                         <th className="py-2 px-3 min-w-[200px]">Matched Invoices</th>
-
-                        {/* MATCH STATUS */}
-                        <th className="py-2 px-3 text-center min-w-[130px]">Match Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -599,6 +599,14 @@ ${selectedTransactions.map(txn =>
                                   {txn.bookingDate}
                                 </td>
 
+                                {/* BANK NAME */}
+                                <td className="py-1.5 px-3 whitespace-nowrap text-xs text-gray-800 font-medium">
+                                  <div className="flex items-center gap-1.5">
+                                    <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                    <span className="truncate max-w-[160px]">{txn.sourceBankName}</span>
+                                  </div>
+                                </td>
+
                                 {/* REFERENCE */}
                                 <td className="py-1.5 px-3 font-mono font-bold text-gray-900 whitespace-nowrap text-xs">
                                   <div className="flex items-center gap-1.5">
@@ -647,27 +655,6 @@ ${selectedTransactions.map(txn =>
                                       None
                                     </span>
                                   )}
-                                </td>
-
-                                {/* MATCH STATUS */}
-                                <td className="py-1.5 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => toggleRowExpand(key, e)}
-                                    className="inline-flex items-center justify-center gap-1.5 cursor-pointer py-0.5"
-                                  >
-                                    {hasMatches ? (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                        <span>Matched</span>
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                                        Unmatched
-                                      </span>
-                                    )}
-                                    <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180 text-orange-600' : ''}`} />
-                                  </button>
                                 </td>
                               </tr>
 

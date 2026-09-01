@@ -19,10 +19,22 @@ import {
   Split,
   Maximize2,
   Minimize2,
-  RefreshCw
+  RefreshCw,
+  ArrowLeftRight,
+  TrendingUp,
+  TrendingDown,
+  Edit3
 } from 'lucide-react';
 import { BankTransaction, MatchedInvoice } from '../types/reconciliation';
-import { formatCurrency, formatPercent, getMatchStatusClass } from '../utils/formatters';
+import { 
+  formatCurrency, 
+  formatPercent, 
+  getMatchStatusClass, 
+  getExchangeRate, 
+  convertCurrencyAmount,
+  getCurrencySymbol,
+  DEFAULT_USD_RATES
+} from '../utils/formatters';
 
 interface Step2MatchWorkspaceProps {
   bankName: string;
@@ -71,6 +83,8 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
 
   // Confirmation dialog state for manual match
   const [showConfirmMatchModal, setShowConfirmMatchModal] = useState(false);
+  const [customFxRate, setCustomFxRate] = useState<number | ''>('');
+  const [isEditingFxRate, setIsEditingFxRate] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -127,6 +141,8 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
   const handleClearSelection = () => {
     setSelectedTxnIds(new Set());
     setSelectedInvoiceIds(new Set());
+    setCustomFxRate('');
+    setIsEditingFxRate(false);
   };
 
   // Live KPI Calculations
@@ -152,24 +168,67 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
     return Math.round(totalConf / transactions.length);
   }, [transactions]);
 
-  // Selected totals for floating bar
-  const selectedBankTotal = useMemo(() => {
-    return Array.from(selectedTxnIds).reduce<number>((sum, id) => {
-      const txn = transactions.find(t => t.id === id);
-      return sum + (txn ? Math.abs(txn.amount) : 0);
-    }, 0);
+  // Selected item objects
+  const selectedTxnObjects = useMemo(() => {
+    return Array.from(selectedTxnIds)
+      .map(id => transactions.find(t => t.id === id))
+      .filter((t): t is BankTransaction => !!t);
   }, [selectedTxnIds, transactions]);
 
-  const selectedInvoiceTotal = useMemo(() => {
-    return Array.from(selectedInvoiceIds).reduce<number>((sum, id) => {
-      const inv = invoices.find(i => i.id === id);
-      return sum + (inv ? inv.amount : 0);
-    }, 0);
+  const selectedInvoiceObjects = useMemo(() => {
+    return Array.from(selectedInvoiceIds)
+      .map(id => invoices.find(i => i.id === id))
+      .filter((i): i is MatchedInvoice => !!i);
   }, [selectedInvoiceIds, invoices]);
 
+  // Cross-Currency Detection
+  const hasCrossCurrency = useMemo(() => {
+    const hasForeignInv = selectedInvoiceObjects.some(i => i.currency && i.currency !== 'USD');
+    const hasForeignTxn = selectedTxnObjects.some(t => t.originalCurrency && t.originalCurrency !== 'USD');
+    return hasForeignInv || hasForeignTxn;
+  }, [selectedInvoiceObjects, selectedTxnObjects]);
+
+  const foreignCurrency = useMemo(() => {
+    const inv = selectedInvoiceObjects.find(i => i.currency && i.currency !== 'USD');
+    if (inv) return inv.currency;
+    const txn = selectedTxnObjects.find(t => t.originalCurrency && t.originalCurrency !== 'USD');
+    if (txn) return txn.originalCurrency || 'GBP';
+    return 'GBP';
+  }, [selectedInvoiceObjects, selectedTxnObjects]);
+
+  const defaultExchangeRate = useMemo(() => {
+    return getExchangeRate(foreignCurrency, 'USD');
+  }, [foreignCurrency]);
+
+  const effectiveExchangeRate = useMemo(() => {
+    if (typeof customFxRate === 'number' && customFxRate > 0) return customFxRate;
+    return defaultExchangeRate;
+  }, [customFxRate, defaultExchangeRate]);
+
+  // Selected totals for floating bar & confirmation
+  const selectedBankTotal = useMemo(() => {
+    return selectedTxnObjects.reduce((sum, txn) => sum + Math.abs(txn.amount), 0);
+  }, [selectedTxnObjects]);
+
+  const selectedInvoiceOriginalTotal = useMemo(() => {
+    return selectedInvoiceObjects.reduce((sum, inv) => sum + inv.amount, 0);
+  }, [selectedInvoiceObjects]);
+
+  const selectedInvoiceConvertedTotal = useMemo(() => {
+    return selectedInvoiceObjects.reduce((sum, inv) => {
+      if (inv.currency && inv.currency !== 'USD') {
+        const rate = (typeof customFxRate === 'number' && customFxRate > 0) 
+          ? customFxRate 
+          : (inv.exchangeRate || getExchangeRate(inv.currency, 'USD'));
+        return sum + convertCurrencyAmount(inv.amount, inv.currency, 'USD', rate);
+      }
+      return sum + inv.amount;
+    }, 0);
+  }, [selectedInvoiceObjects, customFxRate]);
+
   const selectedVariance = useMemo(() => {
-    return selectedBankTotal - selectedInvoiceTotal;
-  }, [selectedBankTotal, selectedInvoiceTotal]);
+    return Number((selectedBankTotal - selectedInvoiceConvertedTotal).toFixed(2));
+  }, [selectedBankTotal, selectedInvoiceConvertedTotal]);
 
   const hasSelection = selectedTxnIds.size > 0 || selectedInvoiceIds.size > 0;
 
@@ -255,13 +314,20 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
 
     const updatedTxns = transactions.map(t => {
       if (selectedTxnIds.has(t.id)) {
+        const isCross = hasCrossCurrency;
         return {
           ...t,
           status: matchTypeLabel,
-          matchConfidence: selectedVariance === 0 ? 100 : 95,
+          matchConfidence: Math.abs(selectedVariance) < 1 ? 100 : 95,
           matchedInvoiceIds: invIds,
+          originalCurrency: isCross ? foreignCurrency : undefined,
+          foreignAmount: isCross ? selectedInvoiceOriginalTotal : undefined,
+          exchangeRate: isCross ? effectiveExchangeRate : undefined,
+          fxGainLoss: isCross ? selectedVariance : 0,
           matchReasons: [
-            'Manual Reconciliation Override Confirmed',
+            isCross
+              ? `Cross-Currency Match: ${formatCurrency(selectedInvoiceOriginalTotal, foreignCurrency)} @ ${effectiveExchangeRate} FX = ${formatCurrency(selectedInvoiceConvertedTotal, 'USD')}`
+              : 'Manual Reconciliation Override Confirmed',
             `Linked to Invoices: ${invIds.join(', ')}`,
             `Variance: ${formatCurrency(selectedVariance)}`
           ],
@@ -273,11 +339,16 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
 
     const updatedInvs = invoices.map(i => {
       if (selectedInvoiceIds.has(i.id)) {
+        const isCross = i.currency && i.currency !== 'USD';
         return {
           ...i,
           status: isMultiInvoice ? ('Multi-line' as const) : ('Manual Match' as const),
-          matchConfidence: selectedVariance === 0 ? 100 : 95,
+          matchConfidence: Math.abs(selectedVariance) < 1 ? 100 : 95,
           matchedBankTxnId: txnIds[0] || 'MANUAL-BATCH',
+          settlementCurrency: 'USD',
+          exchangeRate: isCross ? effectiveExchangeRate : undefined,
+          convertedAmount: isCross ? convertCurrencyAmount(i.amount, i.currency, 'USD', effectiveExchangeRate) : i.amount,
+          fxGainLoss: isCross ? selectedVariance : 0,
         };
       }
       return i;
@@ -561,14 +632,26 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
 
                         {/* Amount */}
                         <td className={`py-2 px-2 font-mono font-bold text-right whitespace-nowrap ${txn.amount >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                          {formatCurrency(txn.amount)}
+                          <div>{formatCurrency(txn.amount, txn.currency || 'USD')}</div>
+                          {txn.originalCurrency && txn.originalCurrency !== (txn.currency || 'USD') && (
+                            <div className="text-[10px] font-mono text-purple-700 font-medium">
+                              💱 {formatCurrency(txn.foreignAmount || 0, txn.originalCurrency)}
+                            </div>
+                          )}
                         </td>
 
                         {/* Status badge */}
                         <td className="py-2 px-2 text-center whitespace-nowrap">
-                          <span className={`text-[9px] font-mono px-1.5 py-0.5 uppercase font-bold border ${getMatchStatusClass(txn.status)}`}>
-                            {txn.status}
-                          </span>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className={`text-[9px] font-mono px-1.5 py-0.5 uppercase font-bold border ${getMatchStatusClass(txn.status)}`}>
+                              {txn.status}
+                            </span>
+                            {txn.originalCurrency && txn.originalCurrency !== (txn.currency || 'USD') && (
+                              <span className="text-[8px] font-mono bg-purple-100 text-purple-800 px-1 py-0.2 border border-purple-300 font-bold">
+                                {txn.originalCurrency} ⇄ {txn.currency || 'USD'}
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Expand Chevron */}
@@ -594,9 +677,15 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                                   <span className="text-[10px] font-mono bg-gray-100 px-1.5 py-0.5 text-gray-700 border border-gray-300 font-bold">
                                     Conf: {txn.matchConfidence}%
                                   </span>
+                                  {txn.originalCurrency && txn.originalCurrency !== (txn.currency || 'USD') && (
+                                    <span className="text-[10px] font-mono bg-purple-50 text-purple-800 px-1.5 py-0.5 border border-purple-300 font-bold flex items-center gap-1">
+                                      <ArrowLeftRight className="w-3 h-3 text-purple-700" />
+                                      Cross-Currency Reconciled
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-[11px] font-mono text-gray-600">
-                                  Variance: <strong className={txn.variance === 0 ? 'text-green-700' : 'text-red-600'}>{formatCurrency(txn.variance)}</strong>
+                                  Variance: <strong className={txn.variance === 0 ? 'text-green-700' : 'text-red-600'}>{formatCurrency(txn.variance, txn.currency || 'USD')}</strong>
                                 </div>
                               </div>
 
@@ -615,10 +704,46 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                                   <div className="font-mono font-bold text-[#141414]">{txn.reference}</div>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] text-gray-500 uppercase font-bold">Amount</span>
-                                  <div className="font-mono font-bold text-green-700">{formatCurrency(txn.amount)}</div>
+                                  <span className="text-[10px] text-gray-500 uppercase font-bold">Settled Amount ({txn.currency || 'USD'})</span>
+                                  <div className="font-mono font-bold text-green-700">{formatCurrency(txn.amount, txn.currency || 'USD')}</div>
                                 </div>
                               </div>
+
+                              {/* Cross-Currency FX Accounting Breakdown Card */}
+                              {txn.originalCurrency && txn.originalCurrency !== (txn.currency || 'USD') && (
+                                <div className="p-2.5 bg-purple-50 border border-purple-300 space-y-1.5">
+                                  <div className="flex items-center justify-between text-xs font-bold text-purple-950">
+                                    <div className="flex items-center gap-1.5 font-mono">
+                                      <ArrowLeftRight className="w-3.5 h-3.5 text-purple-700" />
+                                      <span>Cross-Currency Normalization ({txn.originalCurrency} ⇄ {txn.currency || 'USD'})</span>
+                                    </div>
+                                    <div className="font-mono text-[11px]">
+                                      Applied Rate: 1 {txn.originalCurrency} = {txn.exchangeRate || 1.2650} {txn.currency || 'USD'}
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] bg-white p-2 border border-purple-200">
+                                    <div>
+                                      <span className="text-[10px] text-gray-500 block uppercase font-bold">Original Invoice Value</span>
+                                      <span className="font-bold text-[#141414]">{formatCurrency(txn.foreignAmount || 0, txn.originalCurrency)}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[10px] text-gray-500 block uppercase font-bold">Converted Bank Value</span>
+                                      <span className="font-bold text-green-800">{formatCurrency(txn.amount, txn.currency || 'USD')}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[10px] text-gray-500 block uppercase font-bold">Realized FX Gain/Loss</span>
+                                      <span className={`font-bold ${(txn.fxGainLoss || 0) >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                        {formatCurrency(txn.fxGainLoss || 0, txn.currency || 'USD')}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[10px] text-gray-500 block uppercase font-bold">GL Posting Account</span>
+                                      <span className="font-bold text-purple-900">#7040 FX Realized</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Matched Invoice(s) breakdown */}
                               <div>
@@ -821,16 +946,28 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                         {inv.entityName}
                       </td>
 
-                      {/* Amount */}
+                      {/* Amount with Cross-Currency handling */}
                       <td className="py-2 px-2 font-mono font-bold text-right text-[#141414] whitespace-nowrap">
-                        {formatCurrency(inv.amount)}
+                        <div>{formatCurrency(inv.amount, inv.currency || 'USD')}</div>
+                        {inv.currency && inv.currency !== 'USD' && (
+                          <div className="text-[10px] font-mono text-purple-700 font-semibold">
+                            ≈ {formatCurrency(inv.convertedAmount || convertCurrencyAmount(inv.amount, inv.currency, 'USD', inv.exchangeRate || 1.265), 'USD')}
+                          </div>
+                        )}
                       </td>
 
                       {/* Status */}
                       <td className="py-2 px-2 text-center whitespace-nowrap">
-                        <span className={`text-[9px] font-mono px-1.5 py-0.5 uppercase font-bold border ${getMatchStatusClass(inv.status)}`}>
-                          {inv.matchConfidence > 0 ? `${inv.matchConfidence}%` : 'Unmatched'}
-                        </span>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 uppercase font-bold border ${getMatchStatusClass(inv.status)}`}>
+                            {inv.matchConfidence > 0 ? `${inv.matchConfidence}%` : 'Unmatched'}
+                          </span>
+                          {inv.currency && inv.currency !== 'USD' && (
+                            <span className="text-[8px] font-mono bg-purple-100 text-purple-800 px-1 py-0.2 border border-purple-300 font-bold">
+                              {inv.currency}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Action */}
@@ -893,6 +1030,7 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
             {invoices.map((inv) => {
               const isExp = expandedInvoiceIds.has(inv.id);
               const linkedTxn = transactions.find(t => t.id === inv.matchedBankTxnId);
+              const isCross = (inv.currency && inv.currency !== 'USD') || (linkedTxn?.originalCurrency && linkedTxn?.originalCurrency !== 'USD');
 
               return (
                 <div key={inv.id} className="p-3 bg-white hover:bg-gray-50 transition-colors">
@@ -909,10 +1047,24 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                       )}
                       <span className="font-mono font-bold text-[#141414] text-xs">{inv.invoiceNumber}</span>
                       <span className="text-gray-600 text-xs">— {inv.entityName}</span>
+                      {isCross && (
+                        <span className="text-[9px] font-mono bg-purple-100 text-purple-800 px-1.5 py-0.2 border border-purple-300 font-bold">
+                          {inv.currency || 'USD'} ⇄ USD
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-4">
-                      <span className="font-mono font-bold text-[#141414] text-xs">{formatCurrency(inv.amount)}</span>
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-[#141414] text-xs">
+                          {formatCurrency(inv.amount, inv.currency || 'USD')}
+                        </div>
+                        {inv.currency && inv.currency !== 'USD' && (
+                          <div className="text-[10px] font-mono text-purple-700">
+                            ≈ {formatCurrency(inv.convertedAmount || convertCurrencyAmount(inv.amount, inv.currency, 'USD', inv.exchangeRate || 1.265), 'USD')}
+                          </div>
+                        )}
+                      </div>
                       <span className={`text-[10px] font-mono px-2 py-0.5 uppercase font-bold border ${getMatchStatusClass(inv.status)}`}>
                         {inv.status}
                       </span>
@@ -954,6 +1106,32 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                         </div>
                       </div>
 
+                      {/* Cross Currency Summary if applicable */}
+                      {isCross && (
+                        <div className="p-2 bg-purple-50 border border-purple-200 text-xs space-y-1">
+                          <div className="flex justify-between items-center text-purple-900 font-bold font-mono text-[11px]">
+                            <span>Cross-Currency Settlement Details</span>
+                            <span>Rate: 1 {inv.currency || 'GBP'} = {inv.exchangeRate || 1.2650} USD</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-purple-950">
+                            <div>
+                              <span className="text-[10px] text-purple-600 block">Doc Amount:</span>
+                              <span className="font-bold">{formatCurrency(inv.amount, inv.currency || 'USD')}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-purple-600 block">Converted USD Eq:</span>
+                              <span className="font-bold text-green-800">
+                                {formatCurrency(inv.convertedAmount || convertCurrencyAmount(inv.amount, inv.currency, 'USD', inv.exchangeRate || 1.265), 'USD')}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-purple-600 block">Realized FX Delta:</span>
+                              <span className="font-bold text-gray-700">{formatCurrency(inv.fxGainLoss || 0, 'USD')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between text-[11px] pt-1">
                         <div className="flex items-center gap-4 text-gray-600 font-mono">
                           <span>Issue Date: <strong className="text-[#141414]">{inv.date}</strong></span>
@@ -981,7 +1159,7 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
         <div className="sticky bottom-0 z-40 bg-white border-2 border-[#141414] text-[#141414] p-4 shadow-2xl animate-in slide-in-from-bottom-5 duration-200">
           <div className="flex flex-wrap items-center justify-between gap-4">
             {/* Counts & Selection Badges */}
-            <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
               <div className="flex items-center gap-2">
                 <span className="p-1 bg-[#141414] text-white font-bold px-2 text-xs">
                   {selectedTxnIds.size}
@@ -989,7 +1167,7 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                 <span className="text-gray-800 font-bold font-sans">Bank Txns</span>
               </div>
 
-              <span className="text-gray-400">|</span>
+              <span className="text-gray-300">|</span>
 
               <div className="flex items-center gap-2">
                 <span className="p-1 bg-[#141414] text-white font-bold px-2 text-xs">
@@ -998,25 +1176,38 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
                 <span className="text-gray-800 font-bold font-sans">Invoices</span>
               </div>
 
-              <span className="text-gray-400">|</span>
+              <span className="text-gray-300">|</span>
 
               <div>
                 <span className="text-gray-500 font-sans text-[11px]">Bank Total: </span>
                 <span className="font-bold text-[#141414]">{formatCurrency(selectedBankTotal)}</span>
               </div>
 
-              <span className="text-gray-400">|</span>
+              <span className="text-gray-300">|</span>
 
-              <div>
-                <span className="text-gray-500 font-sans text-[11px]">Invoice Total: </span>
-                <span className="font-bold text-[#141414]">{formatCurrency(selectedInvoiceTotal)}</span>
-              </div>
+              {hasCrossCurrency ? (
+                <div className="flex items-center gap-2 bg-purple-50 px-2 py-1 border border-purple-200">
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                  <div>
+                    <span className="text-purple-900 font-sans text-[11px] font-bold">FX Invoiced: </span>
+                    <span className="font-bold text-purple-900">{formatCurrency(selectedInvoiceOriginalTotal, foreignCurrency)}</span>
+                    <span className="text-gray-500 mx-1">→</span>
+                    <span className="font-bold text-green-800">{formatCurrency(selectedInvoiceConvertedTotal, 'USD')}</span>
+                    <span className="text-[10px] text-gray-500 ml-1">(@ {effectiveExchangeRate} FX)</span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <span className="text-gray-500 font-sans text-[11px]">Invoice Total: </span>
+                  <span className="font-bold text-[#141414]">{formatCurrency(selectedInvoiceOriginalTotal)}</span>
+                </div>
+              )}
 
-              <span className="text-gray-400">|</span>
+              <span className="text-gray-300">|</span>
 
               <div>
                 <span className="text-gray-500 font-sans text-[11px]">Variance: </span>
-                <span className={`font-bold ${selectedVariance === 0 ? 'text-green-700' : 'text-red-600'}`}>
+                <span className={`font-bold ${Math.abs(selectedVariance) < 0.01 ? 'text-green-700' : 'text-red-600'}`}>
                   {formatCurrency(selectedVariance)}
                 </span>
               </div>
@@ -1049,11 +1240,11 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
       {/* CONFIRM MATCH INTERMEDIATE MODAL / DIALOG */}
       {showConfirmMatchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white border border-[#141414] max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white border border-[#141414] max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-[#141414] pb-3">
               <h3 className="text-sm font-bold text-[#141414] uppercase tracking-wider flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-blue-600" />
-                <span>Confirm Match</span>
+                <span>Confirm Manual Reconciliation Match</span>
               </h3>
               <button
                 type="button"
@@ -1066,28 +1257,77 @@ export const Step2MatchWorkspace: React.FC<Step2MatchWorkspaceProps> = ({
 
             <div className="bg-gray-50 p-4 border border-gray-200 space-y-2.5 font-mono text-xs">
               <div className="flex justify-between">
-                <span className="text-gray-600 font-sans">Bank Transaction Total:</span>
-                <span className="font-bold text-[#141414]">{formatCurrency(selectedBankTotal)}</span>
+                <span className="text-gray-600 font-sans">Bank Transaction Settlement:</span>
+                <span className="font-bold text-[#141414]">{formatCurrency(selectedBankTotal, 'USD')}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600 font-sans">Invoice Total:</span>
-                <span className="font-bold text-[#141414]">{formatCurrency(selectedInvoiceTotal)}</span>
-              </div>
+
+              {hasCrossCurrency ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 font-sans">Foreign Invoices ({foreignCurrency}):</span>
+                    <span className="font-bold text-purple-900">{formatCurrency(selectedInvoiceOriginalTotal, foreignCurrency)}</span>
+                  </div>
+
+                  {/* Editable FX Rate in Modal */}
+                  <div className="p-2.5 bg-white border border-purple-300 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-purple-950 font-sans font-bold text-[11px] flex items-center gap-1">
+                        <ArrowLeftRight className="w-3 h-3 text-purple-700" />
+                        <span>FX Exchange Rate</span>
+                      </span>
+                      <div className="flex items-center gap-1.5 font-mono">
+                        <span className="text-gray-600 text-[11px]">1 {foreignCurrency} =</span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={typeof customFxRate === 'number' ? customFxRate : defaultExchangeRate}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            setCustomFxRate(isNaN(val) ? '' : val);
+                          }}
+                          className="w-24 px-2 py-0.5 text-xs font-mono font-bold border border-gray-300 bg-gray-50 focus:bg-white focus:outline-none focus:border-blue-600 text-right"
+                        />
+                        <span className="text-gray-600 text-[11px]">USD</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between text-[11px] pt-1 border-t border-purple-100">
+                      <span className="text-gray-600 font-sans">Converted Bank Value:</span>
+                      <span className="font-bold text-green-800">{formatCurrency(selectedInvoiceConvertedTotal, 'USD')}</span>
+                    </div>
+
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-gray-600 font-sans">Realized FX Gain/Loss (GL #7040):</span>
+                      <span className={`font-bold ${selectedVariance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {formatCurrency(selectedVariance, 'USD')}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-gray-600 font-sans">Invoice Total:</span>
+                  <span className="font-bold text-[#141414]">{formatCurrency(selectedInvoiceOriginalTotal)}</span>
+                </div>
+              )}
+
               <div className="flex justify-between border-t border-gray-200 pt-2">
-                <span className="text-gray-600 font-sans font-semibold">Variance:</span>
-                <span className={`font-bold ${selectedVariance === 0 ? 'text-green-700' : 'text-red-600'}`}>
+                <span className="text-gray-600 font-sans font-semibold">Net Residual Variance:</span>
+                <span className={`font-bold ${Math.abs(selectedVariance) < 0.01 ? 'text-green-700' : 'text-red-600'}`}>
                   {formatCurrency(selectedVariance)}
                 </span>
               </div>
+
               <div className="flex justify-between">
                 <span className="text-gray-600 font-sans">Match Type:</span>
                 <span className="font-bold text-blue-700">
-                  {selectedInvoiceIds.size > 1 ? 'Multi-Invoice' : selectedTxnIds.size > 1 ? 'Many-to-One' : '1:1 Direct'}
+                  {hasCrossCurrency ? 'Cross-Currency Reconciliation' : selectedInvoiceIds.size > 1 ? 'Multi-Invoice' : selectedTxnIds.size > 1 ? 'Many-to-One' : '1:1 Direct'}
                 </span>
               </div>
+
               <div className="flex justify-between">
-                <span className="text-gray-600 font-sans">Confidence:</span>
-                <span className="font-bold text-green-700">{selectedVariance === 0 ? '98%' : '88%'}</span>
+                <span className="text-gray-600 font-sans">Reconciliation Confidence:</span>
+                <span className="font-bold text-green-700">{Math.abs(selectedVariance) < 0.01 ? '100%' : '95%'}</span>
               </div>
             </div>
 

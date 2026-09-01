@@ -146,14 +146,28 @@ export const Step3Review: React.FC<Step3ReviewProps> = ({
 
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <span className="font-mono font-bold text-[#141414]">{formatCurrency(txn.amount)}</span>
+                      <span className="font-mono font-bold text-[#141414]">
+                        {formatCurrency(txn.amount, txn.currency || 'USD')}
+                      </span>
+                      {txn.originalCurrency && txn.originalCurrency !== (txn.currency || 'USD') && (
+                        <div className="text-[10px] text-purple-700 font-mono font-semibold">
+                          💱 {formatCurrency(txn.foreignAmount || 0, txn.originalCurrency)} (@ {txn.exchangeRate || 1.2650} FX)
+                        </div>
+                      )}
                       <div className="text-[10px] text-green-700 font-mono font-bold">
                         {matchedInvs.length} Invoices Linked
                       </div>
                     </div>
-                    <span className={`text-[9px] font-mono px-1.5 py-0.5 uppercase font-bold border ${getMatchStatusClass(txn.status)}`}>
-                      {txn.status}
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={`text-[9px] font-mono px-1.5 py-0.5 uppercase font-bold border ${getMatchStatusClass(txn.status)}`}>
+                        {txn.status}
+                      </span>
+                      {txn.originalCurrency && txn.originalCurrency !== (txn.currency || 'USD') && (
+                        <span className="text-[8px] font-mono bg-purple-100 text-purple-800 px-1 py-0.2 border border-purple-300 font-bold">
+                          {txn.originalCurrency} ⇄ {txn.currency || 'USD'}
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => onUnmatchTxn(txn.id)}

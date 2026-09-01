@@ -95,8 +95,15 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <div className="font-bold text-[#141414] text-sm">{invoice.entityName}</div>
               </div>
               <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-gray-500">Total Due Amount</span>
-                <div className="font-mono font-bold text-base text-[#141414]">{formatCurrency(invoice.amount)}</div>
+                <span className="text-[10px] uppercase font-bold text-gray-500">Total Invoice Amount</span>
+                <div className="font-mono font-bold text-base text-[#141414]">
+                  {formatCurrency(invoice.amount, invoice.currency || 'USD')}
+                </div>
+                {invoice.currency && invoice.currency !== 'USD' && (
+                  <div className="text-[11px] font-mono text-purple-700 font-semibold mt-0.5">
+                    ≈ {formatCurrency(invoice.convertedAmount || invoice.amount * (invoice.exchangeRate || 1.265), invoice.settlementCurrency || 'USD')} (@ {invoice.exchangeRate || 1.2650} FX)
+                  </div>
+                )}
               </div>
             </div>
             {invoice.description && (
@@ -105,6 +112,41 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </p>
             )}
           </div>
+
+          {/* Cross Currency Normalization Banner */}
+          {invoice.currency && invoice.currency !== 'USD' && (
+            <div className="p-3 bg-purple-50 border border-purple-200 space-y-1 text-xs">
+              <div className="flex items-center justify-between font-bold text-purple-900">
+                <span className="flex items-center gap-1.5 font-mono text-[11px]">
+                  <span>💱 Cross-Currency Normalization</span>
+                  <span className="px-1.5 py-0.2 bg-purple-200 text-purple-900 text-[10px] rounded">
+                    {invoice.currency} ⇄ {invoice.settlementCurrency || 'USD'}
+                  </span>
+                </span>
+                <span className="font-mono text-xs">
+                  Rate: 1 {invoice.currency} = {invoice.exchangeRate || 1.2650} {invoice.settlementCurrency || 'USD'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-1 font-mono text-[11px] text-purple-950">
+                <div>
+                  <span className="text-[10px] text-purple-600 block">Doc Amount:</span>
+                  <span className="font-bold">{formatCurrency(invoice.amount, invoice.currency)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-purple-600 block">Settled Bank Eq:</span>
+                  <span className="font-bold text-green-800">
+                    {formatCurrency(invoice.convertedAmount || invoice.amount * (invoice.exchangeRate || 1.265), invoice.settlementCurrency || 'USD')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-purple-600 block">Realized FX Delta:</span>
+                  <span className="font-bold text-gray-700">
+                    {formatCurrency(invoice.fxGainLoss || 0, invoice.settlementCurrency || 'USD')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Line Items Table */}
           {invoice.lineItems && invoice.lineItems.length > 0 && (

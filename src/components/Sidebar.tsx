@@ -18,13 +18,15 @@ interface SidebarProps {
   onSelectTab?: (tab: string) => void;
   reconciliationCount?: number;
   batchCount?: number;
+  invoiceBatchCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab = 'reconciliations',
   onSelectTab,
   reconciliationCount = 5,
-  batchCount = 5
+  batchCount = 5,
+  invoiceBatchCount = 4
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
@@ -44,6 +46,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       active: false
     },
     {
+      id: 'invoice_batches',
+      label: 'Invoice Batch',
+      icon: Receipt,
+      badge: invoiceBatchCount > 0 ? `${invoiceBatchCount}` : undefined,
+      active: false
+    },
+    {
       id: 'statements',
       label: 'Bank Statements',
       icon: FolderOpen,
@@ -53,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'invoices',
       label: 'Invoices & Bills',
-      icon: Receipt,
+      icon: FileSpreadsheet,
       badge: '48',
       active: false
     },

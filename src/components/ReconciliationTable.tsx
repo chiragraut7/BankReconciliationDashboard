@@ -240,29 +240,42 @@ export const ReconciliationTable: React.FC<ReconciliationTableProps> = ({
                         className="py-3 px-5 text-center whitespace-nowrap relative"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => onViewRun(run)}
-                            className="p-1.5 text-gray-400 hover:text-[#EA580C] hover:bg-orange-50 rounded-full transition-colors cursor-pointer"
-                            title="Inspect Reconciliation Run"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                        <div 
+                          className="relative inline-block text-left group/action"
+                          onMouseLeave={() => {
+                            if (activeDropdownId === run.id) {
+                              setActiveDropdownId(null);
+                            }
+                          }}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onViewRun(run)}
+                              className="p-1.5 text-gray-400 hover:text-[#EA580C] hover:bg-orange-50 rounded-full transition-colors cursor-pointer"
+                              title="Inspect Reconciliation Run"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => setActiveDropdownId(activeDropdownId === run.id ? null : run.id)}
-                            className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
-                            title="More Options"
-                          >
-                            <MoreVertical className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => setActiveDropdownId(activeDropdownId === run.id ? null : run.id)}
+                              className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 group-hover/action:bg-gray-100 group-hover/action:text-gray-700 transition-colors cursor-pointer"
+                              title="More Options"
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
 
-                        {/* Context Dropdown */}
-                        {activeDropdownId === run.id && (
-                          <div className="absolute right-6 top-10 z-30 w-44 bg-white border border-gray-200 rounded-lg shadow-xl py-1 text-left text-xs font-sans">
+                          {/* Context Dropdown (displays when hovering action button or clicked) */}
+                          <div 
+                            className={`absolute right-0 top-full mt-1 z-40 w-44 bg-white border border-gray-200 rounded-lg shadow-xl py-1 text-left text-xs font-sans transition-all duration-150 transform origin-top-right ${
+                              activeDropdownId === run.id
+                                ? 'opacity-100 scale-100 pointer-events-auto visible'
+                                : 'opacity-0 scale-95 pointer-events-none invisible group-hover/action:opacity-100 group-hover/action:scale-100 group-hover/action:pointer-events-auto group-hover/action:visible'
+                            }`}
+                          >
                             <button
                               type="button"
                               onClick={() => {
@@ -313,7 +326,7 @@ export const ReconciliationTable: React.FC<ReconciliationTableProps> = ({
                               <span>Delete Entry</span>
                             </button>
                           </div>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );

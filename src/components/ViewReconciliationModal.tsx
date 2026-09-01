@@ -341,7 +341,12 @@ export const ViewReconciliationModal: React.FC<ViewReconciliationModalProps> = (
 
                               {/* Amount */}
                               <td className="py-3 px-4 text-right font-mono font-bold text-gray-900 whitespace-nowrap">
-                                {formatCurrency(txn.amount)}
+                                <div>{formatCurrency(txn.amount, txn.currency || 'USD')}</div>
+                                {txn.originalCurrency && txn.originalCurrency !== (txn.currency || 'USD') && (
+                                  <div className="text-[10px] text-purple-700 font-normal">
+                                    {formatCurrency(txn.foreignAmount || 0, txn.originalCurrency)}
+                                  </div>
+                                )}
                               </td>
 
                               {/* Matched Invoices */}

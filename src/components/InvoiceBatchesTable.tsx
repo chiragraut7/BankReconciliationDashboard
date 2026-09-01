@@ -2,37 +2,34 @@ import React, { useState, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
-  Filter, 
   ArrowUpDown, 
-  Layers, 
+  Receipt, 
   Download, 
   Eye, 
   CheckCircle2, 
   Clock, 
-  AlertCircle, 
   FileSpreadsheet, 
   Share2, 
   Trash2, 
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight,
-  Database,
-  Building2,
-  FileCode2,
-  Sparkles,
-  MoreHorizontal
+  ChevronLeft, 
+  ChevronRight, 
+  Building2, 
+  MoreHorizontal,
+  Layers,
+  ArrowDownLeft,
+  ArrowUpRight
 } from 'lucide-react';
-import { ETLBatch, BatchStatus } from '../types/reconciliation';
+import { InvoiceBatch, InvoiceBatchStatus } from '../types/reconciliation';
 
-interface EtlBatchesTableProps {
-  batches: ETLBatch[];
+interface InvoiceBatchesTableProps {
+  batches: InvoiceBatch[];
   onCreateNewBatch: () => void;
-  onViewBatch: (batch: ETLBatch) => void;
+  onViewBatch: (batch: InvoiceBatch) => void;
   onDeleteBatch: (batchId: string) => void;
-  onExportBatch: (batch: ETLBatch) => void;
+  onExportBatch: (batch: InvoiceBatch) => void;
 }
 
-export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
+export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
   batches,
   onCreateNewBatch,
   onViewBatch,
@@ -40,12 +37,11 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
   onExportBatch
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | BatchStatus>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | InvoiceBatchStatus>('All');
   const [formatFilter, setFormatFilter] = useState<string>('All');
   const [sortField, setSortField] = useState<'id' | 'name' | 'status' | 'createdBy' | 'lastModified' | 'totalAmount'>('lastModified');
   const [sortAsc, setSortAsc] = useState(false);
   const [entriesPerPage, setEntriesPerPage] = useState<number>(15);
-  const [currentPage, setCurrentPage] = useState<number>(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   // Sorting handler
@@ -66,7 +62,11 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
           batch.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
           batch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           batch.createdBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          batch.reconciliationNames.some(name => name.toLowerCase().includes(searchTerm.toLowerCase()));
+          batch.invoices.some(inv => 
+            inv.entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inv.matchedBankName.toLowerCase().includes(searchTerm.toLowerCase())
+          );
 
         const matchesStatus = statusFilter === 'All' || batch.status === statusFilter;
         const matchesFormat = formatFilter === 'All' || batch.format === formatFilter;
@@ -98,41 +98,47 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
     const readyCount = batches.filter(b => b.status === 'Ready').length;
     const exportedCount = batches.filter(b => b.status === 'Exported').length;
     const totalAmount = batches.reduce((acc, b) => acc + b.totalAmount, 0);
-    return { totalCount, readyCount, exportedCount, totalAmount };
+    const totalInvoices = batches.reduce((acc, b) => acc + b.totalInvoicesCount, 0);
+    return { totalCount, readyCount, exportedCount, totalAmount, totalInvoices };
   }, [batches]);
 
-  // Download Sample ETL File
-  const handleDownloadEtlFile = (batch: ETLBatch, e: React.MouseEvent) => {
+  // Download Sample Invoice ETL File
+  const handleDownloadInvoiceFile = (batch: InvoiceBatch, e: React.MouseEvent) => {
     e.stopPropagation();
-    const mockContent = `BATCH_ID,STATEMENT_NAME,POSTING_DATE,AMOUNT,STATUS\n${batch.id},"${batch.name}",${batch.postingDate || '2026-08-31'},${batch.totalAmount},${batch.status}`;
-    const ext = batch.format === 'XML_CAMT054' ? 'xml' : batch.format === 'JSON_PAYMENTS' ? 'json' : 'csv';
-    const blob = new Blob([mockContent], { type: 'text/plain;charset=utf-8' });
+    let csvHeader = "INVOICE_NUMBER,TYPE,ENTITY_NAME,DATE,DUE_DATE,AMOUNT,CURRENCY,BANK_NAME,MATCHED_TXN,STATUS\n";
+    let rows = batch.invoices.map(inv => 
+      `"${inv.invoiceNumber}","${inv.type}","${inv.entityName}","${inv.date}","${inv.dueDate}",${inv.amount},"${inv.currency}","${inv.matchedBankName}","${inv.matchedBankTxnId || ''}","${inv.status}"`
+    ).join("\n");
+    const mockContent = csvHeader + rows;
+    const blob = new Blob([mockContent], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${batch.name}.${ext}`;
+    a.download = `${batch.name}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const getFormatBadge = (format: string) => {
     switch (format) {
-      case 'CSV_ERP':
-        return { label: 'SAP CSV', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
-      case 'CSV_NETSUITE':
-        return { label: 'NetSuite CSV', bg: 'bg-purple-50 text-purple-700 border-purple-200' };
-      case 'XML_CAMT054':
-        return { label: 'Camt.054 XML', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-      case 'QUICKBOOKS_IIF':
+      case 'NETSUITE_INVOICE_SYNC':
+        return { label: 'NetSuite Sync', bg: 'bg-purple-50 text-purple-700 border-purple-200' };
+      case 'SAP_AR_AP_FEED':
+        return { label: 'SAP AP/AR Feed', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
+      case 'QUICKBOOKS_INVOICE_JOURNAL':
         return { label: 'QuickBooks IIF', bg: 'bg-amber-50 text-amber-700 border-amber-200' };
-      case 'JSON_PAYMENTS':
-        return { label: 'JSON Stream', bg: 'bg-teal-50 text-teal-700 border-teal-200' };
+      case 'CSV_INVOICE_RECON':
+        return { label: 'Reconciliation CSV', bg: 'bg-teal-50 text-teal-700 border-teal-200' };
+      case 'JSON_INVOICE_STREAM':
+        return { label: 'JSON Stream', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+      case 'XML_PEPPOL_UBL':
+        return { label: 'PEPPOL UBL XML', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
       default:
         return { label: format, bg: 'bg-gray-50 text-gray-700 border-gray-200' };
     }
   };
 
-  const getStatusBadge = (status: BatchStatus) => {
+  const getStatusBadge = (status: InvoiceBatchStatus) => {
     switch (status) {
       case 'Ready':
         return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -156,17 +162,17 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between">
           <div>
             <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider block">
-              Total Batches
+              Total Invoice Batches
             </span>
             <span className="text-2xl font-black text-gray-900 mt-1 block">
               {stats.totalCount}
             </span>
-            <span className="text-xs text-gray-400 mt-0.5 block">
-              Derived from reconciliations
+            <span className="text-xs text-gray-400 mt-0.5 block font-medium">
+              {stats.totalInvoices} Reconciled Invoices
             </span>
           </div>
           <div className="p-3 bg-orange-50 text-[#EA580C] rounded-xl border border-orange-100">
-            <Layers className="w-5 h-5" />
+            <Receipt className="w-5 h-5" />
           </div>
         </div>
 
@@ -178,8 +184,8 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
             <span className="text-2xl font-black text-emerald-600 mt-1 block">
               {stats.readyCount}
             </span>
-            <span className="text-xs text-gray-400 mt-0.5 block">
-              Balanced & verified
+            <span className="text-xs text-gray-400 mt-0.5 block font-medium">
+              Matched & verified against bank
             </span>
           </div>
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
@@ -195,25 +201,25 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
             <span className="text-2xl font-black text-blue-600 mt-1 block">
               {stats.exportedCount}
             </span>
-            <span className="text-xs text-gray-400 mt-0.5 block">
-              Posted to core ledger
+            <span className="text-xs text-gray-400 mt-0.5 block font-medium">
+              Posted to AP/AR ledger
             </span>
           </div>
           <div className="p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
-            <Database className="w-5 h-5" />
+            <Share2 className="w-5 h-5" />
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-between">
           <div>
             <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider block">
-              Total Batched Value
+              Total Invoices Value
             </span>
             <span className="text-2xl font-black text-gray-900 mt-1 block font-mono">
               ${stats.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </span>
-            <span className="text-xs text-gray-400 mt-0.5 block">
-              Across all currencies (USD)
+            <span className="text-xs text-gray-400 mt-0.5 block font-medium">
+              Across all AP & AR batches
             </span>
           </div>
           <div className="p-3 bg-gray-50 text-gray-700 rounded-xl border border-gray-200">
@@ -231,7 +237,7 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by Batch ID, Name, Creator, or Reconciled Statement..."
+            placeholder="Search by Invoice Batch ID, Name, Creator, Customer/Vendor, or Bank..."
             className="w-full pl-10 pr-4 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#EA580C] focus:bg-white focus:outline-hidden"
           />
         </div>
@@ -263,11 +269,12 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
               className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA580C] focus:outline-hidden cursor-pointer"
             >
               <option value="All">All Formats</option>
-              <option value="CSV_ERP">SAP CSV</option>
-              <option value="CSV_NETSUITE">NetSuite CSV</option>
-              <option value="XML_CAMT054">ISO 20022 Camt.054 XML</option>
-              <option value="QUICKBOOKS_IIF">QuickBooks IIF</option>
-              <option value="JSON_PAYMENTS">JSON Stream</option>
+              <option value="NETSUITE_INVOICE_SYNC">NetSuite Sync</option>
+              <option value="SAP_AR_AP_FEED">SAP AP/AR Feed</option>
+              <option value="QUICKBOOKS_INVOICE_JOURNAL">QuickBooks IIF</option>
+              <option value="CSV_INVOICE_RECON">Reconciliation CSV</option>
+              <option value="JSON_INVOICE_STREAM">JSON Stream</option>
+              <option value="XML_PEPPOL_UBL">PEPPOL UBL XML</option>
             </select>
           </div>
 
@@ -288,7 +295,7 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
         </div>
       </div>
 
-      {/* 3. ETL BATCHES TABLE */}
+      {/* 3. INVOICE BATCHES TABLE */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -372,11 +379,11 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                   <td colSpan={7} className="py-16 text-center">
                     <div className="max-w-xs mx-auto text-center space-y-3">
                       <div className="w-12 h-12 bg-orange-50 text-[#EA580C] rounded-full flex items-center justify-center mx-auto border border-orange-100">
-                        <Layers className="w-6 h-6" />
+                        <Receipt className="w-6 h-6" />
                       </div>
-                      <h4 className="font-bold text-gray-800 text-sm">No ETL Batches Found</h4>
+                      <h4 className="font-bold text-gray-800 text-sm">No Invoice Batches Found</h4>
                       <p className="text-xs text-gray-500">
-                        {searchTerm ? 'Try adjusting your search criteria or filters.' : 'Create your first ETL batch by selecting reconciled bank statements.'}
+                        {searchTerm ? 'Try adjusting your search criteria or filters.' : 'Create your first invoice batch by selecting reconciled invoices.'}
                       </p>
                       <button
                         type="button"
@@ -384,7 +391,7 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                         className="px-4 py-2 bg-[#EA580C] text-white rounded-lg font-bold text-xs hover:bg-[#D94E07] cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Create New Batch</span>
+                        <span>Create Invoice Batch</span>
                       </button>
                     </div>
                   </td>
@@ -433,9 +440,19 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                         <span className="font-mono font-bold text-gray-900 block">
                           ${batch.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[10px] text-gray-400 font-mono">
-                          {batch.totalTransactionsCount} txns • {batch.totalInvoicesCount} invs
-                        </span>
+                        <div className="flex items-center justify-end gap-2 text-[10px] text-gray-400 font-mono mt-0.5">
+                          <span className="text-gray-600 font-bold">{batch.totalInvoicesCount} invoices</span>
+                          {batch.apAmount > 0 && (
+                            <span className="text-amber-700 bg-amber-50 px-1 rounded border border-amber-200">
+                              AP ${batch.apAmount.toLocaleString()}
+                            </span>
+                          )}
+                          {batch.arAmount > 0 && (
+                            <span className="text-emerald-700 bg-emerald-50 px-1 rounded border border-emerald-200">
+                              AR ${batch.arAmount.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* 3. Status */}
@@ -466,7 +483,7 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                         {batch.lastModified}
                       </td>
 
-                      {/* 6. Action: Horizontal Three Line (Menu) with Hover Display */}
+                      {/* 6. Action Menu */}
                       <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                         <div 
                           className="relative inline-block text-left group/action"
@@ -476,7 +493,6 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                             }
                           }}
                         >
-                          {/* Three Dots Button */}
                           <button
                             type="button"
                             onClick={() => setOpenMenuId(openMenuId === batch.id ? null : batch.id)}
@@ -495,7 +511,7 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                             }`}
                           >
                             <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
-                              Batch Actions
+                              Invoice Batch Actions
                             </div>
 
                             {/* View Batch */}
@@ -516,12 +532,12 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                               type="button"
                               onClick={(e) => {
                                 setOpenMenuId(null);
-                                handleDownloadEtlFile(batch, e);
+                                handleDownloadInvoiceFile(batch, e);
                               }}
                               className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer"
                             >
                               <Download className="w-4 h-4 text-gray-500" />
-                              <span>Download File</span>
+                              <span>Download CSV</span>
                             </button>
 
                             {/* Export to ERP */}
@@ -534,7 +550,7 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
                               className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
                             >
                               <Share2 className="w-4 h-4 text-gray-500" />
-                              <span>Sync to ERP</span>
+                              <span>Sync to AP/AR</span>
                             </button>
 
                             <div className="my-1 border-t border-gray-100" />
@@ -565,7 +581,7 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
         {/* PAGINATION / FOOTER */}
         <div className="px-6 py-3.5 bg-gray-50/80 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
           <div>
-            Showing <span className="font-bold text-gray-800">{Math.min(filteredBatches.length, entriesPerPage)}</span> of <span className="font-bold text-gray-800">{filteredBatches.length}</span> batch records
+            Showing <span className="font-bold text-gray-800">{Math.min(filteredBatches.length, entriesPerPage)}</span> of <span className="font-bold text-gray-800">{filteredBatches.length}</span> invoice batches
           </div>
 
           <div className="flex items-center gap-2">

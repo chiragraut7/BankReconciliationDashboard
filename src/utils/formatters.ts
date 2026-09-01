@@ -53,3 +53,51 @@ export const getMatchStatusClass = (status: string) => {
       return 'bg-gray-100 text-gray-600 border border-gray-300';
   }
 };
+
+export const DEFAULT_USD_RATES: Record<string, number> = {
+  USD: 1.0,
+  GBP: 1.2650, // 1 GBP = 1.2650 USD (or 1 USD = 0.7905 GBP)
+  EUR: 1.0800, // 1 EUR = 1.0800 USD (or 1 USD = 0.9259 EUR)
+  CAD: 0.7400, // 1 CAD = 0.7400 USD
+  AUD: 0.6550, // 1 AUD = 0.6550 USD
+  JPY: 0.0067, // 1 JPY = 0.0067 USD
+  CHF: 1.1300, // 1 CHF = 1.1300 USD
+  SGD: 0.7450, // 1 SGD = 0.7450 USD
+};
+
+export const getExchangeRate = (fromCurrency: string, toCurrency: string): number => {
+  const from = fromCurrency.toUpperCase();
+  const to = toCurrency.toUpperCase();
+  if (from === to) return 1.0;
+  
+  const fromToUsd = DEFAULT_USD_RATES[from] || 1.0;
+  const toToUsd = DEFAULT_USD_RATES[to] || 1.0;
+  
+  return Number((fromToUsd / toToUsd).toFixed(4));
+};
+
+export const convertCurrencyAmount = (
+  amount: number,
+  fromCurrency: string,
+  toCurrency: string,
+  customRate?: number
+): number => {
+  if (fromCurrency.toUpperCase() === toCurrency.toUpperCase()) return amount;
+  const rate = customRate !== undefined && customRate > 0 ? customRate : getExchangeRate(fromCurrency, toCurrency);
+  return Number((amount * rate).toFixed(2));
+};
+
+export const getCurrencySymbol = (currency: string = 'USD'): string => {
+  switch (currency.toUpperCase()) {
+    case 'GBP': return '£';
+    case 'EUR': return '€';
+    case 'JPY': return '¥';
+    case 'CAD': return 'C$';
+    case 'AUD': return 'A$';
+    case 'CHF': return 'CHF ';
+    case 'SGD': return 'S$';
+    case 'USD':
+    default: return '$';
+  }
+};
+
