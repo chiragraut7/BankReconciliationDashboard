@@ -105,8 +105,8 @@ export const ViewBatchDetailsModal: React.FC<ViewBatchDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 p-3 sm:p-5 bg-black/65 backdrop-blur-xs flex items-center justify-center animate-in fade-in duration-150 font-sans">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col w-full max-w-6xl max-h-[92vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 p-5 bg-black/60 backdrop-blur-xs flex items-center justify-center animate-in fade-in duration-150 font-sans">
+      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col w-full h-full overflow-hidden">
         
         {/* MODAL HEADER */}
         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between shrink-0">

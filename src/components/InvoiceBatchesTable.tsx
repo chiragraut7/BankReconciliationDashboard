@@ -56,16 +56,17 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
 
   // Filtered & Sorted batches
   const filteredBatches = useMemo(() => {
-    return batches
+    return (batches || [])
       .filter((batch) => {
-        const matchesSearch =
-          batch.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          batch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          batch.createdBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          batch.invoices.some(inv => 
-            inv.entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            inv.matchedBankName.toLowerCase().includes(searchTerm.toLowerCase())
+        const q = searchTerm.toLowerCase().trim();
+        const matchesSearch = !q ||
+          (batch.id || '').toLowerCase().includes(q) ||
+          (batch.name || '').toLowerCase().includes(q) ||
+          (batch.createdBy || '').toLowerCase().includes(q) ||
+          (batch.invoices || []).some(inv => 
+            (inv.entityName || '').toLowerCase().includes(q) ||
+            (inv.invoiceNumber || '').toLowerCase().includes(q) ||
+            (inv.matchedBankName || '').toLowerCase().includes(q)
           );
 
         const matchesStatus = statusFilter === 'All' || batch.status === statusFilter;
@@ -76,17 +77,17 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
       .sort((a, b) => {
         let comparison = 0;
         if (sortField === 'id') {
-          comparison = a.id.localeCompare(b.id);
+          comparison = (a.id || '').localeCompare(b.id || '');
         } else if (sortField === 'name') {
-          comparison = a.name.localeCompare(b.name);
+          comparison = (a.name || '').localeCompare(b.name || '');
         } else if (sortField === 'status') {
-          comparison = a.status.localeCompare(b.status);
+          comparison = (a.status || '').localeCompare(b.status || '');
         } else if (sortField === 'createdBy') {
-          comparison = a.createdBy.localeCompare(b.createdBy);
+          comparison = (a.createdBy || '').localeCompare(b.createdBy || '');
         } else if (sortField === 'lastModified') {
-          comparison = a.lastModified.localeCompare(b.lastModified);
+          comparison = (a.lastModified || '').localeCompare(b.lastModified || '');
         } else if (sortField === 'totalAmount') {
-          comparison = a.totalAmount - b.totalAmount;
+          comparison = (a.totalAmount || 0) - (b.totalAmount || 0);
         }
         return sortAsc ? comparison : -comparison;
       });
@@ -94,11 +95,12 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
 
   // Statistics
   const stats = useMemo(() => {
-    const totalCount = batches.length;
-    const readyCount = batches.filter(b => b.status === 'Ready').length;
-    const exportedCount = batches.filter(b => b.status === 'Exported').length;
-    const totalAmount = batches.reduce((acc, b) => acc + b.totalAmount, 0);
-    const totalInvoices = batches.reduce((acc, b) => acc + b.totalInvoicesCount, 0);
+    const list = batches || [];
+    const totalCount = list.length;
+    const readyCount = list.filter(b => b.status === 'Ready').length;
+    const exportedCount = list.filter(b => b.status === 'Exported').length;
+    const totalAmount = list.reduce((acc, b) => acc + (b.totalAmount || 0), 0);
+    const totalInvoices = list.reduce((acc, b) => acc + (b.totalInvoicesCount || 0), 0);
     return { totalCount, readyCount, exportedCount, totalAmount, totalInvoices };
   }, [batches]);
 
@@ -106,21 +108,23 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
   const handleDownloadInvoiceFile = (batch: InvoiceBatch, e: React.MouseEvent) => {
     e.stopPropagation();
     let csvHeader = "INVOICE_NUMBER,TYPE,ENTITY_NAME,DATE,DUE_DATE,AMOUNT,CURRENCY,BANK_NAME,MATCHED_TXN,STATUS\n";
-    let rows = batch.invoices.map(inv => 
-      `"${inv.invoiceNumber}","${inv.type}","${inv.entityName}","${inv.date}","${inv.dueDate}",${inv.amount},"${inv.currency}","${inv.matchedBankName}","${inv.matchedBankTxnId || ''}","${inv.status}"`
+    let rows = (batch.invoices || []).map(inv => 
+      `"${inv.invoiceNumber || ''}","${inv.type || ''}","${inv.entityName || ''}","${inv.date || ''}","${inv.dueDate || ''}",${inv.amount || 0},"${inv.currency || ''}","${inv.matchedBankName || ''}","${inv.matchedBankTxnId || ''}","${inv.status || ''}"`
     ).join("\n");
     const mockContent = csvHeader + rows;
     const blob = new Blob([mockContent], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${batch.name}.csv`;
+    a.download = `${batch.name || 'batch'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const getFormatBadge = (format: string) => {
     switch (format) {
+      case 'YARDI_VOYAGER_LOADER':
+        return { label: 'Yardi PayScan', bg: 'bg-orange-50 text-[#EA580C] border-orange-200' };
       case 'NETSUITE_INVOICE_SYNC':
         return { label: 'NetSuite Sync', bg: 'bg-purple-50 text-purple-700 border-purple-200' };
       case 'SAP_AR_AP_FEED':
@@ -269,6 +273,7 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
               className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA580C] focus:outline-hidden cursor-pointer"
             >
               <option value="All">All Formats</option>
+              <option value="YARDI_VOYAGER_LOADER">Yardi PayScan / GL Loader</option>
               <option value="NETSUITE_INVOICE_SYNC">NetSuite Sync</option>
               <option value="SAP_AR_AP_FEED">SAP AP/AR Feed</option>
               <option value="QUICKBOOKS_INVOICE_JOURNAL">QuickBooks IIF</option>

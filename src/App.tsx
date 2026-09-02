@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, HelpCircle, X } from 'lucide-react';
-import { ReconciliationRun, ETLBatch, InvoiceBatch } from './types/reconciliation';
+import { ReconciliationRun, ETLBatch, InvoiceBatch, InvoiceBatchItem } from './types/reconciliation';
 import { INITIAL_RECONCILIATION_RUNS, INITIAL_ETL_BATCHES, INITIAL_INVOICE_BATCHES } from './data/mockData';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -15,6 +15,15 @@ import { ViewBatchDetailsModal } from './components/ViewBatchDetailsModal';
 import { InvoiceBatchesTable } from './components/InvoiceBatchesTable';
 import { CreateInvoiceBatchModal } from './components/CreateInvoiceBatchModal';
 import { ViewInvoiceBatchDetailsModal } from './components/ViewInvoiceBatchDetailsModal';
+import { MappingManagerModal } from './components/MappingManagerModal';
+import { YardiVendorMapping, YardiEntityMapping } from './types/yardiMapping';
+import { 
+  getStoredVendorMappings, 
+  getStoredEntityMappings, 
+  saveStoredVendorMappings, 
+  saveStoredEntityMappings 
+} from './utils/yardiMapping';
+import { Users2 } from 'lucide-react';
 
 export default function App() {
   // Master state for all reconciliation records
@@ -25,6 +34,9 @@ export default function App() {
 
   // Master state for Invoice Batches
   const [invoiceBatches, setInvoiceBatches] = useState<InvoiceBatch[]>(INITIAL_INVOICE_BATCHES);
+
+  // Track invoices removed from batches so they appear in CreateInvoiceBatchModal
+  const [removedInvoices, setRemovedInvoices] = useState<InvoiceBatchItem[]>([]);
   
   // Navigation tab: 'reconciliations' | 'batches' | 'invoice_batches' | other sidebar tabs
   const [activeNavTab, setActiveNavTab] = useState<string>('reconciliations');
@@ -42,6 +54,11 @@ export default function App() {
   // Modal states for Invoice Batches
   const [isCreateInvoiceBatchModalOpen, setIsCreateInvoiceBatchModalOpen] = useState<boolean>(false);
   const [viewingInvoiceBatch, setViewingInvoiceBatch] = useState<InvoiceBatch | null>(null);
+  const [isMappingManagerOpen, setIsMappingManagerOpen] = useState<boolean>(false);
+
+  // Global Yardi Mappings
+  const [globalVendorMappings, setGlobalVendorMappings] = useState<YardiVendorMapping[]>(() => getStoredVendorMappings());
+  const [globalEntityMappings, setGlobalEntityMappings] = useState<YardiEntityMapping[]>(() => getStoredEntityMappings());
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -139,6 +156,58 @@ export default function App() {
     alert(`Invoice Batch ${batch.id} (${batch.name}) successfully queued for transmission to ${batch.exportDestination || 'AP/AR Feed'}.`);
   };
 
+  // Handler to remove an invoice from an existing batch and return it to the available pool
+  const handleRemoveInvoiceFromBatch = (batchId: string, invoiceId: string, invoice: InvoiceBatchItem) => {
+    if (confirm(`Remove invoice ${invoice.invoiceNumber} from batch ${batchId}?\n\nIt will be returned to the unbatched pool and will appear in "Create Invoice Batch" marked as removed from this batch.`)) {
+      // 1. Remove from invoiceBatches state
+      setInvoiceBatches(prev => prev.map(b => {
+        if (b.id !== batchId) return b;
+        const updatedInvoices = b.invoices.filter(i => i.id !== invoiceId);
+        const apAmt = updatedInvoices.filter(i => i.type === 'AP').reduce((acc, i) => acc + (i.convertedAmount ?? (i.currency === 'USD' ? i.amount : i.amount * (i.exchangeRate || 1))), 0);
+        const arAmt = updatedInvoices.filter(i => i.type === 'AR').reduce((acc, i) => acc + (i.convertedAmount ?? (i.currency === 'USD' ? i.amount : i.amount * (i.exchangeRate || 1))), 0);
+        return {
+          ...b,
+          invoices: updatedInvoices,
+          invoiceIds: b.invoiceIds.filter(id => id !== invoiceId),
+          totalInvoicesCount: updatedInvoices.length,
+          totalAmount: apAmt + arAmt,
+          apAmount: apAmt,
+          arAmount: arAmt,
+          lastModified: 'Just now'
+        };
+      }));
+
+      // 2. Also update viewing batch if open
+      setViewingInvoiceBatch(prev => {
+        if (!prev || prev.id !== batchId) return prev;
+        const updatedInvoices = prev.invoices.filter(i => i.id !== invoiceId);
+        const apAmt = updatedInvoices.filter(i => i.type === 'AP').reduce((acc, i) => acc + (i.convertedAmount ?? (i.currency === 'USD' ? i.amount : i.amount * (i.exchangeRate || 1))), 0);
+        const arAmt = updatedInvoices.filter(i => i.type === 'AR').reduce((acc, i) => acc + (i.convertedAmount ?? (i.currency === 'USD' ? i.amount : i.amount * (i.exchangeRate || 1))), 0);
+        return {
+          ...prev,
+          invoices: updatedInvoices,
+          invoiceIds: prev.invoiceIds.filter(id => id !== invoiceId),
+          totalInvoicesCount: updatedInvoices.length,
+          totalAmount: apAmt + arAmt,
+          apAmount: apAmt,
+          arAmount: arAmt,
+          lastModified: 'Just now'
+        };
+      });
+
+      // 3. Mark invoice as removed and add to removedInvoices pool
+      const removedItem: InvoiceBatchItem = {
+        ...invoice,
+        removedFromBatchId: batchId,
+        removedFromBatchName: viewingInvoiceBatch?.name || 'Previous Batch',
+        removedAt: new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        removalReason: 'Manually removed from batch by controller'
+      };
+
+      setRemovedInvoices(prev => [removedItem, ...prev.filter(i => i.id !== invoiceId)]);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FBFBFB] text-[#1E293B] flex flex-col font-sans selection:bg-[#EA580C] selection:text-white">
       {/* Top Header Bar for 4see PRO */}
@@ -178,8 +247,17 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Top-Right Primary Button: [ + Create new Invoice Batch ] */}
+                {/* Top-Right Primary Buttons */}
                 <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsMappingManagerOpen(true)}
+                    className="w-full sm:w-auto bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Users2 className="w-4 h-4 text-[#EA580C]" />
+                    <span>Vendor & Entity Mappings</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setIsCreateInvoiceBatchModalOpen(true)}
@@ -332,6 +410,7 @@ export default function App() {
         onClose={() => setIsCreateInvoiceBatchModalOpen(false)}
         reconciliationRuns={runs}
         onCreateBatch={handleCreateInvoiceBatch}
+        removedInvoices={removedInvoices}
       />
 
       {/* VIEW INVOICE BATCH DETAILS & STREAM MODAL */}
@@ -341,6 +420,7 @@ export default function App() {
         batch={viewingInvoiceBatch}
         reconciliationRuns={runs}
         onExportToErp={handleExportInvoiceBatch}
+        onRemoveInvoice={handleRemoveInvoiceFromBatch}
       />
 
       {/* Standalone PDF Statement Viewer Modal */}
@@ -383,6 +463,22 @@ export default function App() {
       <KeyboardShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* Standalone Vendor & Entity Mapping Manager Modal */}
+      <MappingManagerModal
+        isOpen={isMappingManagerOpen}
+        onClose={() => setIsMappingManagerOpen(false)}
+        vendorMappings={globalVendorMappings}
+        entityMappings={globalEntityMappings}
+        onUpdateVendorMappings={(updated) => {
+          setGlobalVendorMappings(updated);
+          saveStoredVendorMappings(updated);
+        }}
+        onUpdateEntityMappings={(updated) => {
+          setGlobalEntityMappings(updated);
+          saveStoredEntityMappings(updated);
+        }}
       />
     </div>
   );

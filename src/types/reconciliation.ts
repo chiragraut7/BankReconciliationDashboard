@@ -40,12 +40,70 @@ export interface BankTransaction {
   rawText?: string;
 }
 
+export interface InvoiceLineItemSplit {
+  target: string;
+  percent: number;
+  amount: number;
+  vat: number;
+  totalAmount: number;
+}
+
+export interface InvoiceRichLineItem {
+  id: string;
+  glCode: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  netAmount: number;
+  taxRate: string;
+  taxAmount: number;
+  otherAmount?: number;
+  totalAmount: number;
+  splits?: InvoiceLineItemSplit[];
+}
+
+export interface InvoiceApportionmentLineBreakdown {
+  description: string;
+  allocated: number;
+  sharePercent: number;
+}
+
+export interface InvoiceApportionment {
+  payingEntity: string;
+  bank: string;
+  net: number;
+  vat: number;
+  gross: number;
+  percent: number;
+  tier?: string;
+  status?: string;
+  color?: string;
+  lineBreakdown?: InvoiceApportionmentLineBreakdown[];
+}
+
+export interface PayingEntityDetail {
+  entityName: string;
+  bankName: string;
+  paymentCurrency: string;
+  tier?: string;
+  status?: string;
+}
+
+export interface InvoicePreApprovalChecklist {
+  clientInfoVerified: boolean;
+  vendorInfoVerified: boolean;
+  reconciliationVerified: boolean;
+  invoiceNumberVerified: boolean;
+  dueDateVerified: boolean;
+}
+
 export interface MatchedInvoice {
   id: string;
   invoiceNumber: string;
+  invoiceIdDisplay?: string; // e.g. '#150' or '#73'
   date: string;
   dueDate: string;
-  entityName: string; // Customer or Vendor
+  entityName: string; // Customer or Vendor e.g. 'Nexus Credit Partners Investment Management Limited'
   type: 'AR' | 'AP';
   amount: number;
   currency: string; // Document currency e.g. 'GBP', 'EUR', 'USD'
@@ -61,6 +119,35 @@ export interface MatchedInvoice {
   taxAmount?: number;
   paymentMethod?: string;
   description?: string;
+  
+  // Rich invoice metadata from invoice inspection
+  jobNumber?: string; // e.g. 'JOB-2026-9921'
+  expensesType?: string; // e.g. 'EXP'
+  category?: string; // e.g. 'IT & SaaS Services'
+  vendorVatNumber?: string; // e.g. 'GB 982 4410 89'
+  postMonth?: string; // e.g. '07/2026'
+  submittedOn?: string; // e.g. '16/07/2026'
+  fromDate?: string;
+  toDate?: string;
+  paymentTerms?: string; // e.g. 'Net 0 days (Due: 16/07/2026)'
+  entity?: string; // e.g. 'Nexus European Credit Opportunities S.a.r.l'
+  payingEntity?: string;
+  payingEntities?: PayingEntityDetail[];
+  approvalWorkflow?: string;
+  bankName?: string;
+  paymentCurrency?: string;
+  totalIncVat?: number;
+  totalExVat?: number;
+  isApproved?: boolean;
+  isReconciled?: boolean;
+  checklist?: InvoicePreApprovalChecklist;
+  apportionment?: InvoiceApportionment[];
+  richLineItems?: InvoiceRichLineItem[];
+  removedFromBatchId?: string; // e.g. 'INV-BATCH-2026-001' if removed from previous batch
+  removedFromBatchName?: string;
+  removedAt?: string;
+  removalReason?: string;
+
   lineItems?: Array<{
     id: string;
     description: string;
@@ -143,6 +230,7 @@ export interface ETLBatch {
 export type InvoiceBatchStatus = 'Ready' | 'Exported' | 'Processing' | 'Draft' | 'Failed';
 
 export type InvoiceETLFormat = 
+  | 'YARDI_VOYAGER_LOADER'
   | 'NETSUITE_INVOICE_SYNC' 
   | 'SAP_AR_AP_FEED' 
   | 'QUICKBOOKS_INVOICE_JOURNAL' 
@@ -153,6 +241,7 @@ export type InvoiceETLFormat =
 export interface InvoiceBatchItem {
   id: string;
   invoiceNumber: string;
+  invoiceIdDisplay?: string;
   date: string;
   dueDate: string;
   entityName: string;
@@ -171,6 +260,33 @@ export interface InvoiceBatchItem {
   sourceRunId?: string;
   poNumber?: string;
   description?: string;
+  jobNumber?: string;
+  expensesType?: string;
+  category?: string;
+  vendorVatNumber?: string;
+  postMonth?: string;
+  submittedOn?: string;
+  fromDate?: string;
+  toDate?: string;
+  paymentTerms?: string;
+  entity?: string;
+  payingEntity?: string;
+  payingEntities?: PayingEntityDetail[];
+  approvalWorkflow?: string;
+  bankName?: string;
+  paymentCurrency?: string;
+  totalIncVat?: number;
+  totalExVat?: number;
+  taxAmount?: number;
+  isApproved?: boolean;
+  isReconciled?: boolean;
+  checklist?: InvoicePreApprovalChecklist;
+  apportionment?: InvoiceApportionment[];
+  richLineItems?: InvoiceRichLineItem[];
+  removedFromBatchId?: string; // e.g. 'INV-BATCH-2026-001' if removed from previous batch
+  removedFromBatchName?: string;
+  removedAt?: string;
+  removalReason?: string;
 }
 
 export interface InvoiceBatch {

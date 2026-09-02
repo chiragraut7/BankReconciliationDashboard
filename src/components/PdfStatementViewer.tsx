@@ -41,7 +41,7 @@ interface PdfStatementViewerProps {
 
 const DEFAULT_TRANSACTIONS = [
   { id: 'TXN-10021', date: '23-Jan-2026', reference: 'ACH-889212', description: 'ACME PAYMENT SUPPLIES DIRECT DEBIT', debit: null, credit: 12500.00, balance: 124140.00 },
-  { id: 'TXN-10022', date: '24-Jan-2026', reference: 'WIRE-992014', description: 'ACME & APEX CONSOLIDATED SETTLEMENT', debit: null, credit: 25000.00, balance: 149140.00 },
+  { id: 'TXN-10022', date: '24-Jan-2026', reference: 'WIRE-992014', description: 'ACME & NEXUS CONSOLIDATED SETTLEMENT', debit: null, credit: 25000.00, balance: 149140.00 },
   { id: 'TXN-10023', date: '12-Jan-2026', reference: 'FED-449102', description: 'STARLIGHT FINANCIAL GROUP INFLOW', debit: null, credit: 92400.00, balance: 111640.00 },
   { id: 'TXN-10024', date: '28-Jan-2026', reference: 'ACH-110294', description: 'DATASPHERE ANALYTICS SAAS SUBSCRIPTION', debit: null, credit: 48500.00, balance: 197640.00 },
   { id: 'TXN-10025', date: '21-Jan-2026', reference: 'TT-771920', description: 'GLOBAL LOGISTICS UK FREIGHT DISPATCH', debit: null, credit: 8080.00, balance: 119720.00 },

@@ -94,10 +94,11 @@ export const EtlBatchesTable: React.FC<EtlBatchesTableProps> = ({
 
   // Statistics
   const stats = useMemo(() => {
-    const totalCount = batches.length;
-    const readyCount = batches.filter(b => b.status === 'Ready').length;
-    const exportedCount = batches.filter(b => b.status === 'Exported').length;
-    const totalAmount = batches.reduce((acc, b) => acc + b.totalAmount, 0);
+    const list = batches || [];
+    const totalCount = list.length;
+    const readyCount = list.filter(b => b.status === 'Ready').length;
+    const exportedCount = list.filter(b => b.status === 'Exported').length;
+    const totalAmount = list.reduce((acc, b) => acc + (b.totalAmount || 0), 0);
     return { totalCount, readyCount, exportedCount, totalAmount };
   }, [batches]);
 

@@ -256,10 +256,217 @@ export const INITIAL_TRANSACTIONS: BankTransaction[] = [
     ],
     variance: 0.00,
     category: 'Telecom Services'
+  },
+  {
+    id: 'TXN-10036',
+    bookingDate: '31-Aug-2026',
+    valueDate: '31-Aug-2026',
+    reference: 'TXN-10036',
+    description: 'NEXUS CREDIT PARTNERS INV MGMT WIRE',
+    amount: 2076.51,
+    type: 'debit',
+    status: 'Exact Match',
+    matchConfidence: 100,
+    currency: 'USD',
+    originalCurrency: 'GBP',
+    foreignAmount: 1641.51,
+    exchangeRate: 1.2650,
+    fxGainLoss: 0.00,
+    matchedInvoiceIds: ['INV-15299'],
+    matchReasons: [
+      'Cross-Currency Match: £1,641.51 GBP @ 1.2650 FX = $2,076.51 USD',
+      'Entity Match (Nexus European Credit Opportunities)',
+      'Vendor & Reference Match (Nexus Credit Partners - #150)'
+    ],
+    variance: 0.00,
+    category: 'Investment Advisory'
+  },
+  {
+    id: 'TXN-10037',
+    bookingDate: '31-Aug-2026',
+    valueDate: '31-Aug-2026',
+    reference: 'TXN-10037',
+    description: 'ALPHATECH SOLUTIONS MULTI-ENTITY WIRE SETTLE',
+    amount: 2076.51,
+    type: 'debit',
+    status: 'Exact Match',
+    matchConfidence: 100,
+    currency: 'USD',
+    originalCurrency: 'GBP',
+    foreignAmount: 1641.51,
+    exchangeRate: 1.2650,
+    fxGainLoss: 0.00,
+    matchedInvoiceIds: ['INV-20266603'],
+    matchReasons: [
+      'Multi-Entity Apportionment Match: £1,641.51 GBP @ 1.2650 FX = $2,076.51 USD',
+      'Vendor Match (AlphaTech Solutions Pvt. Ltd.)',
+      'Invoice #73 Verified & Split Validated across Novus Lux Evermont (76.79%) and Stonegate (23.21%)'
+    ],
+    variance: 0.00,
+    category: 'IT & Advisory Services'
   }
 ];
 
 export const INITIAL_INVOICES: MatchedInvoice[] = [
+  {
+    id: 'INV-20266603',
+    invoiceNumber: 'INV20266603',
+    invoiceIdDisplay: '#73',
+    date: '31/03/2026',
+    dueDate: '27/08/2026',
+    entityName: 'AlphaTech Solutions Pvt. Ltd.',
+    entity: 'Novus Lux Fairhaven Intermediate 06 SCSp',
+    jobNumber: 'JOB-2026-6603',
+    expensesType: 'EXP',
+    vendorVatNumber: 'GB 882 1094 33',
+    postMonth: '03/2026',
+    submittedOn: '27/08/2026',
+    fromDate: '01/03/2026',
+    toDate: '31/03/2026',
+    paymentTerms: 'Net 0 days (Due: 27/08/2026)',
+    payingEntity: 'Novus Lux Evermont 02 SCSp',
+    payingEntities: [
+      {
+        entityName: 'Novus Lux Evermont 02 SCSp',
+        bankName: 'GL12_EUDL_COINVEST_BNP_GBP',
+        paymentCurrency: 'GBP',
+        tier: 'Tier 1',
+        status: 'Submitted For Review'
+      },
+      {
+        entityName: 'Novus Lux Stonegate 05 SCSp',
+        bankName: 'COINVEST EL_BNP_GBP_SCSP',
+        paymentCurrency: 'GBP',
+        tier: 'Tier 1',
+        status: 'Submitted For Review'
+      }
+    ],
+    approvalWorkflow: 'Finance Operations & Partner Review',
+    bankName: 'GL12_EUDL_COINVEST_BNP_GBP',
+    paymentCurrency: 'GBP',
+    type: 'AP',
+    amount: 1641.51,
+    totalIncVat: 1641.51,
+    totalExVat: 1591.51,
+    taxAmount: 50.00,
+    currency: 'GBP',
+    settlementCurrency: 'USD',
+    exchangeRate: 1.2650,
+    convertedAmount: 2076.51,
+    fxGainLoss: 0.00,
+    status: 'Exact Match',
+    matchConfidence: 100,
+    matchedBankTxnId: 'TXN-10037',
+    poNumber: 'PO-ALPHA-6603',
+    description: 'AlphaTech Solutions advisory, market data, and research infrastructure split across Evermont 02 and Stonegate 05',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'Novus Lux Evermont 02 SCSp',
+        bank: 'GL12_EUDL_COINVEST_BNP_GBP',
+        net: 1260.55,
+        vat: 0.00,
+        gross: 1260.55,
+        percent: 76.792,
+        tier: 'Tier 1',
+        status: 'Submitted For Review',
+        color: '#831843',
+        lineBreakdown: [
+          { description: 'ESG - Transactional / Investment related', allocated: 12.35, sharePercent: 76.792 },
+          { description: 'Market Data - Operating Expense', allocated: 20.29, sharePercent: 76.792 },
+          { description: 'Notary Services - Transactional / Investment related', allocated: 1056.17, sharePercent: 76.792 },
+          { description: 'Research - Transactional / Investment related', allocated: 171.74, sharePercent: 76.792 }
+        ]
+      },
+      {
+        payingEntity: 'Novus Lux Stonegate 05 SCSp',
+        bank: 'COINVEST EL_BNP_GBP_SCSP',
+        net: 380.96,
+        vat: 0.00,
+        gross: 380.96,
+        percent: 23.208,
+        tier: 'Tier 1',
+        status: 'Submitted For Review',
+        color: '#6B21A8',
+        lineBreakdown: [
+          { description: 'ESG - Transactional / Investment related', allocated: 3.73, sharePercent: 23.208 },
+          { description: 'Market Data - Operating Expense', allocated: 6.13, sharePercent: 23.208 },
+          { description: 'Notary Services - Transactional / Investment related', allocated: 319.20, sharePercent: 23.208 },
+          { description: 'Research - Transactional / Investment related', allocated: 51.90, sharePercent: 23.208 }
+        ]
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'ALPHA-LI-1',
+        glCode: 'GL-6100 ESG',
+        description: 'ESG - Transactional / Investment related',
+        quantity: 1,
+        unitPrice: 16.08,
+        netAmount: 16.08,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 16.08,
+        splits: [
+          { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 12.35, vat: 0.00, totalAmount: 12.35 },
+          { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 3.73, vat: 0.00, totalAmount: 3.73 }
+        ]
+      },
+      {
+        id: 'ALPHA-LI-2',
+        glCode: 'GL-6250 MKT',
+        description: 'Market Data - Operating Expense',
+        quantity: 1,
+        unitPrice: 26.42,
+        netAmount: 26.42,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 26.42,
+        splits: [
+          { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 20.29, vat: 0.00, totalAmount: 20.29 },
+          { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 6.13, vat: 0.00, totalAmount: 6.13 }
+        ]
+      },
+      {
+        id: 'ALPHA-LI-3',
+        glCode: 'GL-7100 NOT',
+        description: 'Notary Services - Transactional / Investment related',
+        quantity: 1,
+        unitPrice: 1375.37,
+        netAmount: 1375.37,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 1375.37,
+        splits: [
+          { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 1056.17, vat: 0.00, totalAmount: 1056.17 },
+          { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 319.20, vat: 0.00, totalAmount: 319.20 }
+        ]
+      },
+      {
+        id: 'ALPHA-LI-4',
+        glCode: 'GL-6800 RES',
+        description: 'Research - Transactional / Investment related',
+        quantity: 1,
+        unitPrice: 223.64,
+        netAmount: 223.64,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 223.64,
+        splits: [
+          { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 171.74, vat: 0.00, totalAmount: 171.74 },
+          { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 51.90, vat: 0.00, totalAmount: 51.90 }
+        ]
+      }
+    ]
+  },
   {
     id: 'INV-10482',
     invoiceNumber: 'INV-10482',
@@ -454,11 +661,24 @@ export const INITIAL_INVOICES: MatchedInvoice[] = [
   {
     id: 'INV-10496',
     invoiceNumber: 'INV-10496',
+    invoiceIdDisplay: '#146',
     date: '24-Aug-2026',
     dueDate: '08-Sep-2026',
     entityName: 'British Telecom UK Ltd',
+    entity: 'BT Global Communications UK',
+    jobNumber: 'JOB-2026-7719',
+    expensesType: 'EXP',
+    vendorVatNumber: 'GB 245 7193 00',
+    postMonth: '08/2026',
+    submittedOn: '24/08/2026',
+    paymentTerms: 'Net 15 days',
+    payingEntity: 'BT Global Communications UK',
+    bankName: 'HSBC Corporate',
+    paymentCurrency: 'GBP',
     type: 'AR',
     amount: 10000.00,
+    totalIncVat: 10000.00,
+    totalExVat: 10000.00,
     currency: 'GBP',
     settlementCurrency: 'USD',
     exchangeRate: 1.2650,
@@ -468,16 +688,80 @@ export const INITIAL_INVOICES: MatchedInvoice[] = [
     matchConfidence: 99,
     matchedBankTxnId: 'TXN-10033',
     poNumber: 'PO-BT-9921',
-    description: 'UK Enterprise SD-WAN & MPLS Backbone - Invoiced in GBP (£)'
+    description: 'UK Enterprise SD-WAN & MPLS Backbone - Invoiced in GBP (£)',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'BT Global Communications UK',
+        bank: 'HSBC Corporate',
+        net: 10000.00,
+        vat: 0.00,
+        gross: 10000.00,
+        percent: 100
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'BT-LI-1',
+        glCode: 'GL-6300 TEL',
+        description: 'Dedicated Fiber Gigabit Backbone Circuit',
+        quantity: 1,
+        unitPrice: 6500.00,
+        netAmount: 6500.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 6500.00,
+        splits: [
+          { target: 'London HQ Trading Operations', percent: 70.00, amount: 4550.00, vat: 0.00, totalAmount: 4550.00 },
+          { target: 'Edinburgh Back-office Hub', percent: 30.00, amount: 1950.00, vat: 0.00, totalAmount: 1950.00 }
+        ]
+      },
+      {
+        id: 'BT-LI-2',
+        glCode: 'GL-6350 NET',
+        description: 'Managed SD-WAN Edge Routing & Zero-Trust Gateway',
+        quantity: 1,
+        unitPrice: 3500.00,
+        netAmount: 3500.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 3500.00,
+        splits: [
+          { target: 'London HQ Trading Operations', percent: 70.00, amount: 2450.00, vat: 0.00, totalAmount: 2450.00 },
+          { target: 'Edinburgh Back-office Hub', percent: 30.00, amount: 1050.00, vat: 0.00, totalAmount: 1050.00 }
+        ]
+      }
+    ]
   },
   {
     id: 'INV-10497',
     invoiceNumber: 'INV-10497',
+    invoiceIdDisplay: '#147',
     date: '25-Aug-2026',
     dueDate: '09-Sep-2026',
     entityName: 'Siemens AG Germany',
+    entity: 'Siemens Industrial Automation S.A.',
+    jobNumber: 'JOB-2026-5520',
+    expensesType: 'Cap-Ex',
+    vendorVatNumber: 'DE 129 274 001',
+    postMonth: '08/2026',
+    submittedOn: '25/08/2026',
+    paymentTerms: 'Net 30 days',
+    payingEntity: 'Siemens Industrial Automation S.A.',
+    bankName: 'HSBC Corporate',
+    paymentCurrency: 'EUR',
     type: 'AP',
     amount: 15000.00,
+    totalIncVat: 15000.00,
+    totalExVat: 15000.00,
     currency: 'EUR',
     settlementCurrency: 'USD',
     exchangeRate: 1.0800,
@@ -487,16 +771,84 @@ export const INITIAL_INVOICES: MatchedInvoice[] = [
     matchConfidence: 98,
     matchedBankTxnId: 'TXN-10034',
     poNumber: 'PO-SIE-4401',
-    description: 'SCADA Infrastructure & Factory Automation - Invoiced in EUR (€)'
+    description: 'SCADA Infrastructure & Factory Automation - Invoiced in EUR (€)',
+    removedFromBatchId: 'INV-BATCH-2026-001',
+    removedFromBatchName: 'August2026_AP_Settlement_Sync',
+    removedAt: '28-Aug-2026 11:30',
+    removalReason: 'Excluded for tax code re-classification',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'Siemens Industrial Automation S.A.',
+        bank: 'HSBC Corporate',
+        net: 15000.00,
+        vat: 0.00,
+        gross: 15000.00,
+        percent: 100
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'SIE-LI-1',
+        glCode: 'GL-7500 IND',
+        description: 'Simatic S7-1500 PLC Controller Modules & Industrial Bus',
+        quantity: 1,
+        unitPrice: 10500.00,
+        netAmount: 10500.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 10500.00,
+        splits: [
+          { target: 'Munich Smart Plant 1', percent: 60.00, amount: 6300.00, vat: 0.00, totalAmount: 6300.00 },
+          { target: 'Stuttgart Logistics Depot', percent: 40.00, amount: 4200.00, vat: 0.00, totalAmount: 4200.00 }
+        ]
+      },
+      {
+        id: 'SIE-LI-2',
+        glCode: 'GL-7550 SOFT',
+        description: 'TIA Portal V19 Multi-user Engineering License',
+        quantity: 1,
+        unitPrice: 4500.00,
+        netAmount: 4500.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 4500.00,
+        splits: [
+          { target: 'Munich Smart Plant 1', percent: 60.00, amount: 2700.00, vat: 0.00, totalAmount: 2700.00 },
+          { target: 'Stuttgart Logistics Depot', percent: 40.00, amount: 1800.00, vat: 0.00, totalAmount: 1800.00 }
+        ]
+      }
+    ]
   },
   {
     id: 'INV-10498',
     invoiceNumber: 'INV-10498',
+    invoiceIdDisplay: '#148',
     date: '27-Aug-2026',
     dueDate: '11-Sep-2026',
     entityName: 'Vodafone Global UK',
+    entity: 'Vodafone Roaming Services UK',
+    jobNumber: 'JOB-2026-2218',
+    expensesType: 'EXP',
+    vendorVatNumber: 'GB 569 9532 77',
+    postMonth: '08/2026',
+    submittedOn: '27/08/2026',
+    paymentTerms: 'Net 15 days',
+    payingEntity: 'Vodafone Roaming Services UK',
+    bankName: 'HSBC Corporate',
+    paymentCurrency: 'GBP',
     type: 'AP',
     amount: 8000.00,
+    totalIncVat: 8000.00,
+    totalExVat: 8000.00,
     currency: 'GBP',
     settlementCurrency: 'USD',
     exchangeRate: 1.2650,
@@ -506,14 +858,64 @@ export const INITIAL_INVOICES: MatchedInvoice[] = [
     matchConfidence: 88,
     matchedBankTxnId: 'TXN-10035',
     poNumber: 'PO-VOD-8812',
-    description: 'Global 5G IoT SIM Connectivity & Roaming - Invoiced in GBP (£)'
+    description: 'Global 5G IoT SIM Connectivity & Roaming - Invoiced in GBP (£)',
+    removedFromBatchId: 'INV-BATCH-2026-001',
+    removedFromBatchName: 'August2026_AP_Settlement_Sync',
+    removedAt: '29-Aug-2026 16:45',
+    removalReason: 'Split payment revision requested by AP Lead',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'Vodafone Roaming Services UK',
+        bank: 'HSBC Corporate',
+        net: 8000.00,
+        vat: 0.00,
+        gross: 8000.00,
+        percent: 100
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'VOD-LI-1',
+        glCode: 'GL-6400 IOT',
+        description: 'Global 5G M2M Connected SIM Fleet Pooling (5,000 Units)',
+        quantity: 1,
+        unitPrice: 8000.00,
+        netAmount: 8000.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 8000.00,
+        splits: [
+          { target: 'Global Fleet Telematics', percent: 100.00, amount: 8000.00, vat: 0.00, totalAmount: 8000.00 }
+        ]
+      }
+    ]
   },
   {
     id: 'INV-10499',
     invoiceNumber: 'INV-10499',
+    invoiceIdDisplay: '#149',
     date: '28-Aug-2026',
     dueDate: '12-Sep-2026',
     entityName: 'Dassault Aviation Systems',
+    entity: 'Dassault Aviation Group S.A.',
+    jobNumber: 'JOB-2026-8840',
+    expensesType: 'Cap-Ex',
+    vendorVatNumber: 'FR 38 400 829 110',
+    postMonth: '08/2026',
+    submittedOn: '28/08/2026',
+    paymentTerms: 'Net 30 days',
+    payingEntity: 'Corporate Treasury Lux',
+    bankName: 'HSBC Corporate',
+    paymentCurrency: 'EUR',
     type: 'AR',
     amount: 20000.00,
     currency: 'EUR',
@@ -521,6 +923,498 @@ export const INITIAL_INVOICES: MatchedInvoice[] = [
     matchConfidence: 0,
     poNumber: 'PO-DAS-2026',
     description: 'Aerodynamic CAD/CAM Software Modeling - Invoiced in EUR (€)'
+  },
+  {
+    id: 'INV-15299',
+    invoiceNumber: 'NEX - FE - 15299',
+    invoiceIdDisplay: '#150',
+    date: '31/03/2026',
+    dueDate: '16/07/2026',
+    entityName: 'Nexus Credit Partners Investment Management Limited',
+    entity: 'Nexus European Credit Opportunities S.a.r.l',
+    jobNumber: 'JOB-2026-9921',
+    expensesType: 'EXP',
+    vendorVatNumber: 'GB 982 4410 89',
+    postMonth: '07/2026',
+    submittedOn: '16/07/2026',
+    paymentTerms: 'Net 0 days (Due: 16/07/2026)',
+    payingEntity: 'Nexus European Credit Opportunities S.a.r.l',
+    bankName: 'Barclays Corporate UK',
+    paymentCurrency: 'GBP',
+    type: 'AP',
+    amount: 1641.51,
+    totalIncVat: 1641.51,
+    totalExVat: 1641.51,
+    currency: 'GBP',
+    settlementCurrency: 'USD',
+    exchangeRate: 1.2650,
+    convertedAmount: 2076.51,
+    fxGainLoss: 0.00,
+    status: 'Exact Match',
+    matchConfidence: 100,
+    matchedBankTxnId: 'TXN-10036',
+    poNumber: 'PO-NEX-15299',
+    description: 'Nexus Credit Partners Investment Management advisory fee & transactional due diligence',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'Nexus European Credit Opportunities S.a.r.l',
+        bank: 'Barclays Corporate UK',
+        net: 1641.51,
+        vat: 0.00,
+        gross: 1641.51,
+        percent: 100
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'NEX-LI-1',
+        glCode: 'GL-6100 ESG',
+        description: 'ESG - Transactional / Investment related',
+        quantity: 1,
+        unitPrice: 16.08,
+        netAmount: 16.08,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 16.08,
+        splits: [
+          { target: 'Nexus Credit Partners Fund IV', percent: 74.54, amount: 11.99, vat: 0.00, totalAmount: 11.99 },
+          { target: 'Nexus Direct Lending Lux', percent: 22.58, amount: 3.63, vat: 0.00, totalAmount: 3.63 },
+          { target: 'Nexus European Credit Opps', percent: 2.88, amount: 0.46, vat: 0.00, totalAmount: 0.46 }
+        ]
+      },
+      {
+        id: 'NEX-LI-2',
+        glCode: 'GL-6250 MKT',
+        description: 'Market Data - Operating Expense',
+        quantity: 1,
+        unitPrice: 26.42,
+        netAmount: 26.42,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 26.42,
+        splits: [
+          { target: 'Nexus Credit Partners Fund IV', percent: 74.54, amount: 19.69, vat: 0.00, totalAmount: 19.69 },
+          { target: 'Nexus Direct Lending Lux', percent: 22.58, amount: 5.97, vat: 0.00, totalAmount: 5.97 },
+          { target: 'Nexus European Credit Opps', percent: 2.88, amount: 0.76, vat: 0.00, totalAmount: 0.76 }
+        ]
+      },
+      {
+        id: 'NEX-LI-3',
+        glCode: 'GL-7100 NOT',
+        description: 'Notary Services - Transactional / Investment related',
+        quantity: 1,
+        unitPrice: 1375.37,
+        netAmount: 1375.37,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 1375.37,
+        splits: [
+          { target: 'Nexus Credit Partners Fund IV', percent: 74.54, amount: 1025.20, vat: 0.00, totalAmount: 1025.20 },
+          { target: 'Nexus Direct Lending Lux', percent: 22.58, amount: 310.56, vat: 0.00, totalAmount: 310.56 },
+          { target: 'Nexus European Credit Opps', percent: 2.88, amount: 39.61, vat: 0.00, totalAmount: 39.61 }
+        ]
+      },
+      {
+        id: 'NEX-LI-4',
+        glCode: 'GL-6800 RES',
+        description: 'Research - Transactional / Investment related',
+        quantity: 1,
+        unitPrice: 223.64,
+        netAmount: 223.64,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 223.64,
+        splits: [
+          { target: 'Nexus Credit Partners Fund IV', percent: 74.54, amount: 166.70, vat: 0.00, totalAmount: 166.70 },
+          { target: 'Nexus Direct Lending Lux', percent: 22.58, amount: 50.50, vat: 0.00, totalAmount: 50.50 },
+          { target: 'Nexus European Credit Opps', percent: 2.88, amount: 6.44, vat: 0.00, totalAmount: 6.44 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'INV-29104',
+    invoiceNumber: 'BX - RE - 29104',
+    invoiceIdDisplay: '#151',
+    date: '15/07/2026',
+    dueDate: '15/08/2026',
+    entityName: 'Blackstone Real Estate Advisors UK',
+    entity: 'BREP Europe VI Investment S.a.r.l',
+    jobNumber: 'JOB-2026-4412',
+    expensesType: 'EXP',
+    vendorVatNumber: 'GB 114 8830 42',
+    postMonth: '07/2026',
+    submittedOn: '18/07/2026',
+    paymentTerms: 'Net 30 days',
+    payingEntity: 'BREP Europe VI Investment S.a.r.l',
+    bankName: 'HSBC Corporate',
+    paymentCurrency: 'GBP',
+    type: 'AP',
+    amount: 28450.00,
+    totalIncVat: 28450.00,
+    totalExVat: 28450.00,
+    currency: 'GBP',
+    settlementCurrency: 'USD',
+    exchangeRate: 1.2650,
+    convertedAmount: 35989.25,
+    fxGainLoss: 0.00,
+    status: 'Exact Match',
+    matchConfidence: 99,
+    matchedBankTxnId: 'TXN-10026',
+    poNumber: 'PO-BX-29104',
+    description: 'Commercial Real Estate Due Diligence & Asset Valuation Retainer',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'BREP Europe VI Investment S.a.r.l',
+        bank: 'HSBC Corporate',
+        net: 28450.00,
+        vat: 0.00,
+        gross: 28450.00,
+        percent: 100
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'BX-LI-1',
+        glCode: 'GL-7200 VAL',
+        description: 'Property Appraisal & Environmental Inspection',
+        quantity: 1,
+        unitPrice: 14500.00,
+        netAmount: 14500.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 14500.00,
+        splits: [
+          { target: 'Blackstone Pan-European Logistics', percent: 65.00, amount: 9425.00, vat: 0.00, totalAmount: 9425.00 },
+          { target: 'Blackstone Hospitality Lux', percent: 35.00, amount: 5075.00, vat: 0.00, totalAmount: 5075.00 }
+        ]
+      },
+      {
+        id: 'BX-LI-2',
+        glCode: 'GL-7300 LEG',
+        description: 'Cross-Border Real Estate Structuring & Notarial Filing',
+        quantity: 1,
+        unitPrice: 13950.00,
+        netAmount: 13950.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 13950.00,
+        splits: [
+          { target: 'Blackstone Pan-European Logistics', percent: 65.00, amount: 9067.50, vat: 0.00, totalAmount: 9067.50 },
+          { target: 'Blackstone Hospitality Lux', percent: 35.00, amount: 4882.50, vat: 0.00, totalAmount: 4882.50 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'INV-8491',
+    invoiceNumber: 'KKR - CRED - 8491',
+    invoiceIdDisplay: '#152',
+    date: '20/07/2026',
+    dueDate: '20/08/2026',
+    entityName: 'KKR Credit Advisors (US) LLC',
+    entity: 'KKR Global Private Credit Opportunity Fund',
+    jobNumber: 'JOB-2026-6109',
+    expensesType: 'EXP',
+    vendorVatNumber: 'US 13-9284102',
+    postMonth: '07/2026',
+    submittedOn: '22/07/2026',
+    paymentTerms: 'Net 30 days',
+    payingEntity: 'KKR Global Private Credit Opportunity Fund',
+    bankName: 'JPMorgan Chase Treasury',
+    paymentCurrency: 'USD',
+    type: 'AP',
+    amount: 42800.00,
+    totalIncVat: 42800.00,
+    totalExVat: 42800.00,
+    currency: 'USD',
+    status: 'Exact Match',
+    matchConfidence: 100,
+    matchedBankTxnId: 'TXN-10021',
+    poNumber: 'PO-KKR-8491',
+    description: 'Senior Secured Direct Lending Agency Administration & Collateral Monitoring',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'KKR Global Private Credit Opportunity Fund',
+        bank: 'JPMorgan Chase Treasury',
+        net: 42800.00,
+        vat: 0.00,
+        gross: 42800.00,
+        percent: 100
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'KKR-LI-1',
+        glCode: 'GL-6900 ADM',
+        description: 'Direct Loan Agency & Facility Management Fee',
+        quantity: 1,
+        unitPrice: 25000.00,
+        netAmount: 25000.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 25000.00,
+        splits: [
+          { target: 'KKR Private Credit Fund I', percent: 80.00, amount: 20000.00, vat: 0.00, totalAmount: 20000.00 },
+          { target: 'KKR Mezzanine Partners', percent: 20.00, amount: 5000.00, vat: 0.00, totalAmount: 5000.00 }
+        ]
+      },
+      {
+        id: 'KKR-LI-2',
+        glCode: 'GL-6950 VAL',
+        description: 'Quarterly Portfolio Mark-to-Market Valuation & Yield Modeling',
+        quantity: 1,
+        unitPrice: 17800.00,
+        netAmount: 17800.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 17800.00,
+        splits: [
+          { target: 'KKR Private Credit Fund I', percent: 80.00, amount: 14240.00, vat: 0.00, totalAmount: 14240.00 },
+          { target: 'KKR Mezzanine Partners', percent: 20.00, amount: 3560.00, vat: 0.00, totalAmount: 3560.00 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'INV-6612',
+    invoiceNumber: 'APOLLO - PE - 6612',
+    invoiceIdDisplay: '#153',
+    date: '25/07/2026',
+    dueDate: '25/08/2026',
+    entityName: 'Apollo Global Management Europe LLP',
+    entity: 'Apollo Investment Fund IX S.a.r.l',
+    jobNumber: 'JOB-2026-3390',
+    expensesType: 'EXP',
+    vendorVatNumber: 'LU 298 440 19',
+    postMonth: '07/2026',
+    submittedOn: '26/07/2026',
+    paymentTerms: 'Net 30 days',
+    payingEntity: 'Apollo Investment Fund IX S.a.r.l',
+    bankName: 'Citibank Global Markets',
+    paymentCurrency: 'EUR',
+    type: 'AP',
+    amount: 18920.00,
+    totalIncVat: 18920.00,
+    totalExVat: 18920.00,
+    currency: 'EUR',
+    settlementCurrency: 'USD',
+    exchangeRate: 1.0800,
+    convertedAmount: 20433.60,
+    fxGainLoss: 0.00,
+    status: 'Exact Match',
+    matchConfidence: 97,
+    matchedBankTxnId: 'TXN-10022',
+    poNumber: 'PO-APO-6612',
+    description: 'Corporate Restructuring & Acquisition Tax Modeling Advisory',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'Apollo Investment Fund IX S.a.r.l',
+        bank: 'Citibank Global Markets',
+        net: 18920.00,
+        vat: 0.00,
+        gross: 18920.00,
+        percent: 100
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'APO-LI-1',
+        glCode: 'GL-7400 TAX',
+        description: 'Cross-Border M&A Tax Due Diligence & Structuring',
+        quantity: 1,
+        unitPrice: 18920.00,
+        netAmount: 18920.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 18920.00,
+        splits: [
+          { target: 'Apollo European Buyout Fund', percent: 70.00, amount: 13244.00, vat: 0.00, totalAmount: 13244.00 },
+          { target: 'Apollo Hybrid Value Lux', percent: 30.00, amount: 5676.00, vat: 0.00, totalAmount: 5676.00 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'INV-40016',
+    invoiceNumber: 'QUAD - INFRA - 40016',
+    invoiceIdDisplay: '#154',
+    date: '28/07/2026',
+    dueDate: '28/08/2026',
+    entityName: 'Global Infrastructure & Data Centers Group',
+    entity: 'Novus European Infrastructure Fund I',
+    jobNumber: 'JOB-2026-9040',
+    expensesType: 'EXP',
+    vendorVatNumber: 'LU 993 112 04',
+    postMonth: '08/2026',
+    submittedOn: '29/07/2026',
+    paymentTerms: 'Net 30 days',
+    payingEntity: 'Novus European Infrastructure Fund I',
+    bankName: 'HSBC Corporate',
+    paymentCurrency: 'EUR',
+    type: 'AP',
+    amount: 28000.00,
+    totalIncVat: 28000.00,
+    totalExVat: 28000.00,
+    currency: 'EUR',
+    settlementCurrency: 'USD',
+    exchangeRate: 1.0800,
+    convertedAmount: 30240.00,
+    fxGainLoss: 0.00,
+    status: 'Exact Match',
+    matchConfidence: 100,
+    matchedBankTxnId: 'TXN-10026',
+    poNumber: 'PO-QUAD-40016',
+    description: 'Tier-4 Multi-Tenant Hyperscale Data Center Capacity split across 4 Entities (Novus 35%, Nexus 25%, Blackstone 20%, Apollo 20%)',
+    isApproved: true,
+    isReconciled: true,
+    checklist: {
+      clientInfoVerified: true,
+      vendorInfoVerified: true,
+      reconciliationVerified: true,
+      invoiceNumberVerified: true,
+      dueDateVerified: true
+    },
+    apportionment: [
+      {
+        payingEntity: 'Novus European Infrastructure Fund I',
+        bank: 'HSBC Corporate',
+        net: 9800.00,
+        vat: 0.00,
+        gross: 9800.00,
+        percent: 35.00
+      },
+      {
+        payingEntity: 'Nexus Digital Real Estate Holdco',
+        bank: 'Barclays Corporate UK',
+        net: 7000.00,
+        vat: 0.00,
+        gross: 7000.00,
+        percent: 25.00
+      },
+      {
+        payingEntity: 'Blackstone Pan-European Logistics',
+        bank: 'HSBC Corporate',
+        net: 5600.00,
+        vat: 0.00,
+        gross: 5600.00,
+        percent: 20.00
+      },
+      {
+        payingEntity: 'Apollo Hybrid Value Lux',
+        bank: 'Citibank Global Markets',
+        net: 5600.00,
+        vat: 0.00,
+        gross: 5600.00,
+        percent: 20.00
+      }
+    ],
+    richLineItems: [
+      {
+        id: 'QUAD-LI-1',
+        glCode: 'GL-5100 DATA',
+        description: 'Data Center Dark Fiber Lease & Backbone Cross-Connect',
+        quantity: 1,
+        unitPrice: 10000.00,
+        netAmount: 10000.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 10000.00,
+        splits: [
+          { target: 'Novus European Infrastructure Fund I', percent: 35.00, amount: 3500.00, vat: 0.00, totalAmount: 3500.00 },
+          { target: 'Nexus Digital Real Estate Holdco', percent: 25.00, amount: 2500.00, vat: 0.00, totalAmount: 2500.00 },
+          { target: 'Blackstone Pan-European Logistics', percent: 20.00, amount: 2000.00, vat: 0.00, totalAmount: 2000.00 },
+          { target: 'Apollo Hybrid Value Lux', percent: 20.00, amount: 2000.00, vat: 0.00, totalAmount: 2000.00 }
+        ]
+      },
+      {
+        id: 'QUAD-LI-2',
+        glCode: 'GL-5200 ELEC',
+        description: 'High-Voltage Dual-Feed Substation Utility Consumption',
+        quantity: 1,
+        unitPrice: 8000.00,
+        netAmount: 8000.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 8000.00,
+        splits: [
+          { target: 'Novus European Infrastructure Fund I', percent: 35.00, amount: 2800.00, vat: 0.00, totalAmount: 2800.00 },
+          { target: 'Nexus Digital Real Estate Holdco', percent: 25.00, amount: 2000.00, vat: 0.00, totalAmount: 2000.00 },
+          { target: 'Blackstone Pan-European Logistics', percent: 20.00, amount: 1600.00, vat: 0.00, totalAmount: 1600.00 },
+          { target: 'Apollo Hybrid Value Lux', percent: 20.00, amount: 1600.00, vat: 0.00, totalAmount: 1600.00 }
+        ]
+      },
+      {
+        id: 'QUAD-LI-3',
+        glCode: 'GL-6100 COOL',
+        description: 'Direct-to-Chip Liquid Cooling & Chiller Plant Redundancy',
+        quantity: 1,
+        unitPrice: 6000.00,
+        netAmount: 6000.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 6000.00,
+        splits: [
+          { target: 'Novus European Infrastructure Fund I', percent: 35.00, amount: 2100.00, vat: 0.00, totalAmount: 2100.00 },
+          { target: 'Nexus Digital Real Estate Holdco', percent: 25.00, amount: 1500.00, vat: 0.00, totalAmount: 1500.00 },
+          { target: 'Blackstone Pan-European Logistics', percent: 20.00, amount: 1200.00, vat: 0.00, totalAmount: 1200.00 },
+          { target: 'Apollo Hybrid Value Lux', percent: 20.00, amount: 1200.00, vat: 0.00, totalAmount: 1200.00 }
+        ]
+      },
+      {
+        id: 'QUAD-LI-4',
+        glCode: 'GL-7400 SEC',
+        description: 'Physical Security, Biometric Access & SOC-2 Audit Certification',
+        quantity: 1,
+        unitPrice: 4000.00,
+        netAmount: 4000.00,
+        taxRate: '0%',
+        taxAmount: 0.00,
+        totalAmount: 4000.00,
+        splits: [
+          { target: 'Novus European Infrastructure Fund I', percent: 35.00, amount: 1400.00, vat: 0.00, totalAmount: 1400.00 },
+          { target: 'Nexus Digital Real Estate Holdco', percent: 25.00, amount: 1000.00, vat: 0.00, totalAmount: 1000.00 },
+          { target: 'Blackstone Pan-European Logistics', percent: 20.00, amount: 800.00, vat: 0.00, totalAmount: 800.00 },
+          { target: 'Apollo Hybrid Value Lux', percent: 20.00, amount: 800.00, vat: 0.00, totalAmount: 800.00 }
+        ]
+      }
+    ]
   }
 ];
 
@@ -806,8 +1700,165 @@ export const INITIAL_INVOICE_BATCHES: InvoiceBatch[] = [
     name: 'August2026_AP_Settlement_Sync',
     format: 'NETSUITE_INVOICE_SYNC',
     status: 'Ready',
-    invoiceIds: ['INV-10482', 'INV-10483', 'INV-10484', 'INV-10486', 'INV-10487', 'INV-10490'],
+    invoiceIds: ['INV-20266603', 'INV-10482', 'INV-10483', 'INV-10484', 'INV-10486', 'INV-10487', 'INV-10490'],
     invoices: [
+      {
+        id: 'INV-20266603',
+        invoiceNumber: 'INV20266603',
+        invoiceIdDisplay: '#73',
+        date: '31/03/2026',
+        dueDate: '27/08/2026',
+        entityName: 'AlphaTech Solutions Pvt. Ltd.',
+        entity: 'Novus Lux Fairhaven Intermediate 06 SCSp',
+        jobNumber: 'JOB-2026-6603',
+        expensesType: 'EXP',
+        vendorVatNumber: 'GB 882 1094 33',
+        postMonth: '03/2026',
+        submittedOn: '27/08/2026',
+        paymentTerms: 'Net 0 days (Due: 27/08/2026)',
+        payingEntity: 'Novus Lux Evermont 02 SCSp',
+        payingEntities: [
+          {
+            entityName: 'Novus Lux Evermont 02 SCSp',
+            bankName: 'GL12_EUDL_COINVEST_BNP_GBP',
+            paymentCurrency: 'GBP',
+            tier: 'Tier 1',
+            status: 'Submitted For Review'
+          },
+          {
+            entityName: 'Novus Lux Stonegate 05 SCSp',
+            bankName: 'COINVEST EL_BNP_GBP_SCSP',
+            paymentCurrency: 'GBP',
+            tier: 'Tier 1',
+            status: 'Submitted For Review'
+          }
+        ],
+        approvalWorkflow: 'Finance Operations & Partner Review',
+        bankName: 'GL12_EUDL_COINVEST_BNP_GBP',
+        paymentCurrency: 'GBP',
+        type: 'AP',
+        amount: 1641.51,
+        totalIncVat: 1641.51,
+        totalExVat: 1591.51,
+        currency: 'GBP',
+        settlementCurrency: 'USD',
+        exchangeRate: 1.2650,
+        convertedAmount: 2076.51,
+        fxGainLoss: 0.00,
+        status: 'Exact Match',
+        matchConfidence: 100,
+        matchedBankName: 'GL12_EUDL_COINVEST_BNP_GBP',
+        matchedBankTxnId: 'TXN-10037',
+        matchedBankRef: 'TXN-10037',
+        poNumber: 'PO-ALPHA-6603',
+        description: 'AlphaTech Solutions advisory, market data, and research infrastructure split across Evermont 02 and Stonegate 05',
+        isApproved: true,
+        checklist: {
+          clientInfoVerified: true,
+          vendorInfoVerified: true,
+          reconciliationVerified: true,
+          invoiceNumberVerified: true,
+          dueDateVerified: true
+        },
+        apportionment: [
+          {
+            payingEntity: 'Novus Lux Evermont 02 SCSp',
+            bank: 'GL12_EUDL_COINVEST_BNP_GBP',
+            net: 1260.55,
+            vat: 0.00,
+            gross: 1260.55,
+            percent: 76.792,
+            tier: 'Tier 1',
+            status: 'Submitted For Review',
+            color: '#831843',
+            lineBreakdown: [
+              { description: 'ESG - Transactional / Investment related', allocated: 12.35, sharePercent: 76.792 },
+              { description: 'Market Data - Operating Expense', allocated: 20.29, sharePercent: 76.792 },
+              { description: 'Notary Services - Transactional / Investment related', allocated: 1056.17, sharePercent: 76.792 },
+              { description: 'Research - Transactional / Investment related', allocated: 171.74, sharePercent: 76.792 }
+            ]
+          },
+          {
+            payingEntity: 'Novus Lux Stonegate 05 SCSp',
+            bank: 'COINVEST EL_BNP_GBP_SCSP',
+            net: 380.96,
+            vat: 0.00,
+            gross: 380.96,
+            percent: 23.208,
+            tier: 'Tier 1',
+            status: 'Submitted For Review',
+            color: '#6B21A8',
+            lineBreakdown: [
+              { description: 'ESG - Transactional / Investment related', allocated: 3.73, sharePercent: 23.208 },
+              { description: 'Market Data - Operating Expense', allocated: 6.13, sharePercent: 23.208 },
+              { description: 'Notary Services - Transactional / Investment related', allocated: 319.20, sharePercent: 23.208 },
+              { description: 'Research - Transactional / Investment related', allocated: 51.90, sharePercent: 23.208 }
+            ]
+          }
+        ],
+        richLineItems: [
+          {
+            id: 'ALPHA-LI-1',
+            glCode: 'GL-6100 ESG',
+            description: 'ESG - Transactional / Investment related',
+            quantity: 1,
+            unitPrice: 16.08,
+            netAmount: 16.08,
+            taxRate: '0%',
+            taxAmount: 0.00,
+            totalAmount: 16.08,
+            splits: [
+              { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 12.35, vat: 0.00, totalAmount: 12.35 },
+              { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 3.73, vat: 0.00, totalAmount: 3.73 }
+            ]
+          },
+          {
+            id: 'ALPHA-LI-2',
+            glCode: 'GL-6250 MKT',
+            description: 'Market Data - Operating Expense',
+            quantity: 1,
+            unitPrice: 26.42,
+            netAmount: 26.42,
+            taxRate: '0%',
+            taxAmount: 0.00,
+            totalAmount: 26.42,
+            splits: [
+              { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 20.29, vat: 0.00, totalAmount: 20.29 },
+              { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 6.13, vat: 0.00, totalAmount: 6.13 }
+            ]
+          },
+          {
+            id: 'ALPHA-LI-3',
+            glCode: 'GL-7100 NOT',
+            description: 'Notary Services - Transactional / Investment related',
+            quantity: 1,
+            unitPrice: 1375.37,
+            netAmount: 1375.37,
+            taxRate: '0%',
+            taxAmount: 0.00,
+            totalAmount: 1375.37,
+            splits: [
+              { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 1056.17, vat: 0.00, totalAmount: 1056.17 },
+              { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 319.20, vat: 0.00, totalAmount: 319.20 }
+            ]
+          },
+          {
+            id: 'ALPHA-LI-4',
+            glCode: 'GL-6800 RES',
+            description: 'Research - Transactional / Investment related',
+            quantity: 1,
+            unitPrice: 223.64,
+            netAmount: 223.64,
+            taxRate: '0%',
+            taxAmount: 0.00,
+            totalAmount: 223.64,
+            splits: [
+              { target: 'Novus Lux Evermont 02 SCSp', percent: 76.792, amount: 171.74, vat: 0.00, totalAmount: 171.74 },
+              { target: 'Novus Lux Stonegate 05 SCSp', percent: 23.208, amount: 51.90, vat: 0.00, totalAmount: 51.90 }
+            ]
+          }
+        ]
+      },
       {
         id: 'INV-10482',
         invoiceNumber: 'INV-10482',

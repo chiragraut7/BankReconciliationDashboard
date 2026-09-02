@@ -101,3 +101,48 @@ export const getCurrencySymbol = (currency: string = 'USD'): string => {
   }
 };
 
+export const parseInvoiceDate = (dStr?: string): Date | null => {
+  if (!dStr) return null;
+  const trimmed = dStr.trim();
+  
+  // DD-Mon-YYYY or DD/Mon/YYYY (e.g. 25-Aug-2026, 09-Sep-2026)
+  const dMonYMatch = trimmed.match(/^(\d{1,2})[-/\s]([A-Za-z]{3})[-/\s](\d{4})$/);
+  if (dMonYMatch) {
+    const months: Record<string, number> = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+    const day = parseInt(dMonYMatch[1], 10);
+    const mStr = dMonYMatch[2].toLowerCase();
+    const month = months[mStr];
+    const year = parseInt(dMonYMatch[3], 10);
+    if (month !== undefined) {
+      return new Date(year, month, day);
+    }
+  }
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    return new Date(year, month, day);
+  }
+
+  // YYYY-MM-DD
+  const isoMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    return new Date(year, month, day);
+  }
+
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+  return null;
+};
+
