@@ -451,57 +451,6 @@ ${selectedTransactions.map(txn =>
         <div className="flex-1 overflow-y-auto p-6 bg-[#F6F8FA]">
           {activeTab === 'transactions' ? (
             <div className="space-y-4">
-              {/* FILTERS & SEARCH ROW */}
-              <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                {/* Search */}
-                <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search by Reference (TXN-...), Description, Amount, or Matched Invoice (INV-...)..."
-                    className="w-full pl-8.5 pr-3 py-1 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#EA580C] focus:bg-white focus:outline-hidden"
-                  />
-                </div>
-
-                {/* Filters */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Bank Filter */}
-                  <div className="flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-gray-400" />
-                    <select
-                      value={selectedBankFilter}
-                      onChange={(e) => setSelectedBankFilter(e.target.value)}
-                      className="px-2 py-1 text-xs bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA580C] focus:outline-hidden cursor-pointer"
-                    >
-                      <option value="All">All Bank Statements</option>
-                      {uniqueBanks.map(b => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Match Status Badge */}
-                  <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    <span>Status: Matched ({allTransactions.length})</span>
-                  </div>
-
-                  {/* Quick Select / Deselect All */}
-                  <div className="flex items-center gap-1.5 border-l border-gray-200 pl-2.5">
-                    <button
-                      type="button"
-                      onClick={handleToggleSelectAll}
-                      className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      {isAllSelected ? <CheckSquare className="w-3.5 h-3.5 text-[#EA580C]" /> : <Square className="w-3.5 h-3.5 text-gray-400" />}
-                      <span>{isAllSelected ? 'Deselect All' : 'Select All'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* TRANSACTIONS SELECTION TABLE (MATCHING RECONCILED MODAL COMPACT STYLING) */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                 <div className="overflow-x-auto">
