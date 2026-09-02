@@ -14,28 +14,30 @@ import {
   DollarSign, 
   CheckCircle2, 
   FileText, 
-  ArrowRight,
-  ArrowLeft,
-  Download,
-  AlertCircle,
-  AlertTriangle,
-  Copy,
-  Check,
-  Sparkles,
-  Info,
-  ChevronDown,
-  ChevronUp,
-  Tag,
-  ArrowDownLeft,
-  ArrowUpRight,
-  Eye,
-  ExternalLink,
-  Layers,
-  History,
-  SlidersHorizontal,
-  Users2,
-  Table,
-  Code
+  ArrowRight, 
+  ArrowLeft, 
+  Download, 
+  AlertCircle, 
+  AlertTriangle, 
+  Copy, 
+  Check, 
+  Sparkles, 
+  Info, 
+  ChevronDown, 
+  ChevronUp, 
+  Tag, 
+  ArrowDownLeft, 
+  ArrowUpRight, 
+  Eye, 
+  ExternalLink, 
+  Layers, 
+  History, 
+  RotateCcw, 
+  SlidersHorizontal, 
+  Users2, 
+  Table, 
+  Code,
+  Plus
 } from 'lucide-react';
 import { ReconciliationRun, InvoiceBatch, InvoiceETLFormat, InvoiceBatchItem, BankTransaction, MatchedInvoice } from '../types/reconciliation';
 import { INITIAL_INVOICES } from '../data/mockData';
@@ -94,13 +96,23 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
   const [exportDestination, setExportDestination] = useState<string>('Yardi Voyager PayScan GL Engine');
   const [notes, setNotes] = useState<string>('Consolidated invoice batch with granular line-item splits and Yardi GL mappings.');
 
-  // Workspace Tabs: 'invoices' | 'loader' | 'raw'
-  const [activeTab, setActiveTab] = useState<'invoices' | 'loader' | 'raw'>('invoices');
+  // Workspace Tabs: 'invoices' | 'loader'
+  const [activeTab, setActiveTab] = useState<'invoices' | 'loader'>('invoices');
 
   // Mapping State (Synced with persistent localStorage)
   const [vendorMappings, setVendorMappings] = useState<YardiVendorMapping[]>(() => getStoredVendorMappings());
   const [entityMappings, setEntityMappings] = useState<YardiEntityMapping[]>(() => getStoredEntityMappings());
   const [isMappingModalOpen, setIsMappingModalOpen] = useState<boolean>(false);
+
+  // Quick Map Modal State for unmapped Vendor / Entity
+  const [quickMapTarget, setQuickMapTarget] = useState<{
+    type: 'vendor' | 'entity';
+    name: string;
+    originalCode?: string;
+  } | null>(null);
+  const [quickMapYardiCode, setQuickMapYardiCode] = useState<string>('');
+  const [quickMapGlOrFund, setQuickMapGlOrFund] = useState<string>('GL-6000 OPEX');
+  const [mappingNotification, setMappingNotification] = useState<string | null>(null);
 
   // ETL Record Field Overrides (Selective user edits on notes, GL code, descriptions)
   const [recordOverrides, setRecordOverrides] = useState<Record<string, EtlRecordOverride>>({});
@@ -109,7 +121,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'All' | 'AR' | 'AP'>('All');
   const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState<string>('All');
-  const [selectedSourceFilter, setSelectedSourceFilter] = useState<'All' | 'Removed' | 'Fresh'>('All');
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<'All' | 'Removed' | 'Fresh'>('Fresh');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Date Range & Sorting State
@@ -258,10 +270,10 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     return items;
   }, [reconciliationRuns, removedInvoices]);
 
-  // Selected Invoices Set
+  // Selected Invoices Set - default to selecting the fresh (new) reconciled invoices
   const [selectedInvoiceKeys, setSelectedInvoiceKeys] = useState<Set<string>>(() => {
     const defaultSelected = new Set<string>();
-    allReconciledInvoices.slice(0, 10).forEach(inv => {
+    allReconciledInvoices.filter(inv => !inv.removedFromBatchId).slice(0, 10).forEach(inv => {
       defaultSelected.add(`${inv.sourceRunId}_${inv.id}`);
     });
     return defaultSelected;
@@ -534,6 +546,95 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     setEntityMappings(updatedE);
     saveStoredVendorMappings(updatedV);
     saveStoredEntityMappings(updatedE);
+    setMappingNotification(`✓ Successfully auto-resolved and mapped all unmapped items!`);
+    setTimeout(() => setMappingNotification(null), 4000);
+  };
+
+  // Open Quick Map Dialog for a specific unmapped Vendor or Entity
+  const handleOpenQuickMap = (type: 'vendor' | 'entity', name: string, originalCode?: string) => {
+    const defaultCode = type === 'vendor' 
+      ? generateAutoYardiVendorCode(name)
+      : generateAutoYardiEntityCode(name);
+
+    setQuickMapTarget({
+      type,
+      name,
+      originalCode
+    });
+    setQuickMapYardiCode(defaultCode);
+    setQuickMapGlOrFund(type === 'vendor' ? 'GL-6000 OPEX' : 'FUND-01');
+  };
+
+  // Apply Quick Map changes
+  const handleApplyQuickMap = () => {
+    if (!quickMapTarget || !quickMapYardiCode.trim()) return;
+
+    const trimmedCode = quickMapYardiCode.trim().toUpperCase();
+
+    if (quickMapTarget.type === 'vendor') {
+      const existingIdx = vendorMappings.findIndex(
+        v => v.ourVendorName.toLowerCase() === quickMapTarget.name.toLowerCase()
+      );
+      let updated: YardiVendorMapping[];
+      if (existingIdx >= 0) {
+        updated = [...vendorMappings];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          yardiVendorCode: trimmedCode,
+          yardiVendorName: `${quickMapTarget.name} (Mapped)`,
+          defaultGlAccount: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+      } else {
+        const newMap: YardiVendorMapping = {
+          id: `v-map-${Date.now()}`,
+          ourVendorName: quickMapTarget.name,
+          ourVendorCode: quickMapTarget.originalCode || `VND-${quickMapTarget.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`,
+          yardiVendorCode: trimmedCode,
+          yardiVendorName: `${quickMapTarget.name} (PayScan)`,
+          defaultGlAccount: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+        updated = [newMap, ...vendorMappings];
+      }
+      setVendorMappings(updated);
+      saveStoredVendorMappings(updated);
+      setMappingNotification(`✓ Successfully mapped vendor "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}`);
+    } else {
+      const existingIdx = entityMappings.findIndex(
+        e => e.ourEntityName.toLowerCase() === quickMapTarget.name.toLowerCase()
+      );
+      let updated: YardiEntityMapping[];
+      if (existingIdx >= 0) {
+        updated = [...entityMappings];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          yardiEntityCode: trimmedCode,
+          yardiEntityName: `${quickMapTarget.name} (Mapped)`,
+          fundCode: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+      } else {
+        const newMap: YardiEntityMapping = {
+          id: `e-map-${Date.now()}`,
+          ourEntityName: quickMapTarget.name,
+          ourEntityCode: quickMapTarget.originalCode || `PROP-${quickMapTarget.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`,
+          yardiEntityCode: trimmedCode,
+          yardiEntityName: `${quickMapTarget.name} (Property)`,
+          fundCode: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+        updated = [newMap, ...entityMappings];
+      }
+      setEntityMappings(updated);
+      saveStoredEntityMappings(updated);
+      setMappingNotification(`✓ Successfully mapped property/entity "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}`);
+    }
+
+    setQuickMapTarget(null);
+    setTimeout(() => {
+      setMappingNotification(null);
+    }, 4500);
   };
 
   // Handle row expansion
@@ -712,30 +813,6 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
             </div>
 
             <div className="flex items-center gap-3">
-              {/* VENDOR & ENTITY MAPPINGS BUTTON */}
-              <button
-                type="button"
-                onClick={() => setIsMappingModalOpen(true)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-2xs border ${
-                  batchValidation.errorRecordsCount > 0
-                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
-                    : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
-                }`}
-                title="Manage and configure Yardi Vendor codes and Property/Entity mappings"
-              >
-                <Users2 className="w-3.5 h-3.5 text-gray-600" />
-                <span>Vendor & Entity Mappings</span>
-                {batchValidation.errorRecordsCount > 0 ? (
-                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold border border-amber-300">
-                    {batchValidation.errorRecordsCount} Unmapped
-                  </span>
-                ) : (
-                  <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold border border-emerald-200">
-                    All Mapped ✓
-                  </span>
-                )}
-              </button>
-
               <button
                 type="button"
                 onClick={onClose}
@@ -877,19 +954,6 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                   {etlRecords.length} GL Rows
                 </span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('raw')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === 'raw'
-                    ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <Code className="w-4 h-4" />
-                <span>3. Raw ETL Stream (CSV / JSON / XML)</span>
-              </button>
             </div>
 
             {/* BATCH VALUE INDICATOR */}
@@ -907,6 +971,56 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
             {/* TAB 1: INVOICES SELECTION */}
             {activeTab === 'invoices' && (
               <div className="space-y-4">
+                {/* PREVIOUS BATCH TOGGLE SWITCH & ACTIONS BAR */}
+                <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+                  {/* Left: Interactive Switch Toggle between Only New vs Previous Batch Invoices */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                      <span className={`text-xs font-semibold ${selectedSourceFilter === 'Fresh' ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
+                        Only New Invoices ({freshInvoicesCount})
+                      </span>
+
+                      {/* Switch Toggle */}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={selectedSourceFilter === 'Removed'}
+                        onClick={() => setSelectedSourceFilter(prev => prev === 'Removed' ? 'Fresh' : 'Removed')}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-[#EA580C] focus:ring-offset-1 ${
+                          selectedSourceFilter === 'Removed' ? 'bg-[#EA580C]' : 'bg-gray-300'
+                        }`}
+                        title={selectedSourceFilter === 'Removed' ? 'Switch to display only new invoices' : 'Toggle switch to display previous batch invoices'}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                            selectedSourceFilter === 'Removed' ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+
+                      <span className={`text-xs font-semibold ${selectedSourceFilter === 'Removed' ? 'text-amber-900 font-bold' : 'text-gray-500'}`}>
+                        Previous Batch Invoices ({removedInvoicesCount})
+                      </span>
+                    </div>
+
+                    <span className="text-[11px] text-gray-500">
+                      Showing <strong className="text-gray-800">{filteredInvoices.length}</strong> {selectedSourceFilter === 'Removed' ? 'previous batch' : 'new'} invoices
+                    </span>
+                  </div>
+
+                  {/* Right: Select / Deselect All Controls */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAll}
+                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      {isAllSelected ? <CheckSquare className="w-3.5 h-3.5 text-[#EA580C]" /> : <Square className="w-3.5 h-3.5 text-gray-400" />}
+                      <span>{isAllSelected ? 'Deselect All' : 'Select All'}</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* INVOICES SELECTION TABLE */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                   <div className="overflow-x-auto">
@@ -1024,14 +1138,14 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                             </div>
                           </th>
 
-                          {/* SETTLEMENT CONVERSION */}
+                          {/* BATCH SOURCE COLUMN */}
                           <th 
-                            onClick={() => handleHeaderSort('convertedAmount')}
-                            className="py-2.5 px-3 text-right min-w-[130px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            onClick={() => handleHeaderSort('removedFromBatchId')}
+                            className="py-2.5 px-3 min-w-[140px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
                           >
-                            <div className="flex items-center justify-end gap-1.5">
-                              <span>USD Settlement</span>
-                              {sortField === 'convertedAmount' ? (
+                            <div className="flex items-center gap-1.5">
+                              <span>Batch Source</span>
+                              {sortField === 'removedFromBatchId' ? (
                                 sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
                               ) : (
                                 <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
@@ -1050,8 +1164,16 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                           <tr>
                             <td colSpan={9} className="py-12 text-center text-gray-500">
                               <Receipt className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                              <div className="font-semibold text-gray-700">No reconciled invoices found matching filters</div>
-                              <div className="text-xs text-gray-400 mt-1">Try broadening your search or resetting date filters</div>
+                              <div className="font-semibold text-gray-700">
+                                {selectedSourceFilter === 'Removed'
+                                  ? 'No previous batch invoices found for re-batching'
+                                  : 'No new unbatched reconciled invoices found'}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {selectedSourceFilter === 'Removed'
+                                  ? 'Invoices removed from previous batches will appear here'
+                                  : 'Toggle the switch above to view previous batch invoices'}
+                              </div>
                             </td>
                           </tr>
                         ) : (
@@ -1129,14 +1251,22 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                       {/* Vendor Code */}
                                       {isVndMapped ? (
-                                        <span className="px-1.5 py-0.2 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded font-mono text-[9px] font-bold" title={`Yardi PayScan Vendor Code: ${vMap?.yardiVendorCode}`}>
-                                          Yd: {vMap?.yardiVendorCode}
+                                        <span className="px-1.5 py-0.2 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1" title={`Yardi PayScan Vendor Code: ${vMap?.yardiVendorCode}`}>
+                                          <span>Yd: {vMap?.yardiVendorCode}</span>
                                         </span>
                                       ) : (
-                                        <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 border border-amber-300 rounded font-mono text-[9px] font-bold inline-flex items-center gap-0.5" title="Unmapped Yardi Vendor Code">
-                                          <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
-                                          No Vendor Code
-                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenQuickMap('vendor', inv.entityName, inv.vendorCode);
+                                          }}
+                                          className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs hover:shadow-xs cursor-pointer group"
+                                          title="Vendor is not mapped to Yardi PayScan. Click to map this vendor."
+                                        >
+                                          <Plus className="w-2.5 h-2.5 text-amber-700 group-hover:scale-110 transition-transform" />
+                                          <span>Map Vendor</span>
+                                        </button>
                                       )}
 
                                       {/* Entity Code */}
@@ -1146,14 +1276,22 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                           <span>Split ({entitySplits.length} Properties)</span>
                                         </span>
                                       ) : isEntMapped ? (
-                                        <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-mono text-[9px] font-bold" title={`Yardi Property Code: ${eMap?.yardiEntityCode}`}>
-                                          Prop: {eMap?.yardiEntityCode}
+                                        <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1" title={`Yardi Property Code: ${eMap?.yardiEntityCode}`}>
+                                          <span>Prop: {eMap?.yardiEntityCode}</span>
                                         </span>
                                       ) : (
-                                        <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 border border-amber-300 rounded font-mono text-[9px] font-bold inline-flex items-center gap-0.5" title="Unmapped Yardi Property Code">
-                                          <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
-                                          No Prop Code
-                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenQuickMap('entity', primaryEntityName, inv.propertyCode);
+                                          }}
+                                          className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs hover:shadow-xs cursor-pointer group"
+                                          title="Property/Entity is not mapped to Yardi Voyager. Click to map this entity."
+                                        >
+                                          <Plus className="w-2.5 h-2.5 text-amber-700 group-hover:scale-110 transition-transform" />
+                                          <span>Map Entity</span>
+                                        </button>
                                       )}
 
                                       {richLinesCount > 0 && (
@@ -1209,14 +1347,22 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                     )}
                                   </td>
 
-                                  {/* USD SETTLEMENT CONVERSION */}
-                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-800 whitespace-nowrap text-xs">
-                                    <div>
-                                      {formatCurrency(
-                                        inv.convertedAmount ?? (inv.currency === 'USD' ? inv.amount : inv.amount * (inv.exchangeRate || 1)),
-                                        'USD'
-                                      )}
-                                    </div>
+                                  {/* BATCH SOURCE COLUMN CELL */}
+                                  <td className="py-2.5 px-3 whitespace-nowrap">
+                                    {inv.removedFromBatchId ? (
+                                      <div 
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded-md font-mono text-[11px] font-bold shadow-2xs" 
+                                        title={`Removed from previous batch: ${inv.removedFromBatchId}`}
+                                      >
+                                        <RotateCcw className="w-3 h-3 text-amber-600 shrink-0" />
+                                        <span>{inv.removedFromBatchId}</span>
+                                      </div>
+                                    ) : (
+                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md text-[11px] font-semibold shadow-2xs">
+                                        <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span>New Invoice</span>
+                                      </div>
+                                    )}
                                   </td>
 
                                   {/* ACTION ICONS */}
@@ -1357,59 +1503,9 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                 onApplyNoteToInvoice={handleApplyNoteToInvoice}
                 onResetOverrides={handleResetOverrides}
                 onOpenMappingManager={() => setIsMappingModalOpen(true)}
+                batchName={batchName}
+                batchId={batchId}
               />
-            )}
-
-            {/* TAB 3: RAW ETL STREAM */}
-            {activeTab === 'raw' && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-xs p-5 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-900">
-                        Generated Raw Output Stream ({format})
-                      </h3>
-                      <p className="text-xs text-gray-500">
-                        Compiled from {batchTotals.totalCount} selected invoices resulting in {etlRecords.length} granular GL ledger entries.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleCopyPreview}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      {isCopiedFile ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
-                      <span>{isCopiedFile ? 'Copied!' : 'Copy Stream'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const ext = format === 'XML_PEPPOL_UBL' ? 'xml' : format === 'JSON_INVOICE_STREAM' ? 'json' : 'csv';
-                        const blob = new Blob([generatedEtlContent], { type: 'text/plain;charset=utf-8' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${batchName}.${ext}`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                      className="px-3 py-1.5 bg-[#EA580C] hover:bg-[#D94E07] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download {format === 'XML_PEPPOL_UBL' ? 'XML' : format === 'JSON_INVOICE_STREAM' ? 'JSON' : 'CSV'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Code display box */}
-                <div className="bg-[#1E293B] text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto max-h-[500px] border border-gray-800 leading-relaxed shadow-inner">
-                  <pre>{generatedEtlContent}</pre>
-                </div>
-              </div>
             )}
           </div>
 
@@ -1476,6 +1572,146 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
           invoice={inspectingInvoice}
           onClose={() => setInspectingInvoice(null)}
         />
+      )}
+
+      {/* QUICK MAP VENDOR / ENTITY DIALOG MODAL */}
+      {quickMapTarget && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                {quickMapTarget.type === 'vendor' ? (
+                  <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
+                    <Users2 className="w-5 h-5" />
+                  </div>
+                ) : (
+                  <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    {quickMapTarget.type === 'vendor' ? 'Map Vendor to Yardi PayScan' : 'Map Property / Entity to Yardi'}
+                  </h3>
+                  <p className="text-xs text-gray-500">Assign GL account & code mapping for export</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickMapTarget(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
+                  {quickMapTarget.type === 'vendor' ? 'Source Vendor Name' : 'Source Property / Entity Name'}
+                </label>
+                <div className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg font-bold text-gray-900 flex items-center justify-between">
+                  <span className="truncate">{quickMapTarget.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-900 font-mono rounded font-semibold">
+                    Unmapped
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-gray-700">
+                    {quickMapTarget.type === 'vendor' ? 'Target Yardi Vendor Code *' : 'Target Yardi Property Code *'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const auto = quickMapTarget.type === 'vendor'
+                        ? generateAutoYardiVendorCode(quickMapTarget.name)
+                        : generateAutoYardiEntityCode(quickMapTarget.name);
+                      setQuickMapYardiCode(auto);
+                    }}
+                    className="text-[11px] text-[#EA580C] hover:text-[#D94E07] font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Auto-Suggest</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={quickMapYardiCode}
+                  onChange={(e) => setQuickMapYardiCode(e.target.value.toUpperCase())}
+                  placeholder={quickMapTarget.type === 'vendor' ? 'e.g. AWS_PAYSCAN' : 'e.g. PROP_101CAL'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono font-bold text-gray-900 focus:ring-2 focus:ring-[#EA580C] focus:border-transparent outline-none uppercase"
+                  autoFocus
+                />
+              </div>
+
+              {quickMapTarget.type === 'vendor' ? (
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">
+                    Default GL Account / Ledger
+                  </label>
+                  <select
+                    value={quickMapGlOrFund}
+                    onChange={(e) => setQuickMapGlOrFund(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#EA580C] outline-none font-medium text-gray-800 cursor-pointer"
+                  >
+                    <option value="GL-6000 OPEX">GL-6000 - Operating Expenses (OPEX)</option>
+                    <option value="GL-6100 IT & SaaS">GL-6100 - IT, Cloud Infrastructure & SaaS</option>
+                    <option value="GL-6200 Utilities">GL-6200 - Utilities & Energy</option>
+                    <option value="GL-6300 Facilities">GL-6300 - Facilities & Building Maintenance</option>
+                    <option value="GL-6400 Legal & Professional">GL-6400 - Legal & Professional Advisory</option>
+                    <option value="GL-1500 CAPEX Equipment">GL-1500 - Capital Expenditure (CAPEX)</option>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">
+                    Fund Code / Division
+                  </label>
+                  <select
+                    value={quickMapGlOrFund}
+                    onChange={(e) => setQuickMapGlOrFund(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#EA580C] outline-none font-medium text-gray-800 cursor-pointer"
+                  >
+                    <option value="FUND-01">FUND-01 (Primary Real Estate Fund)</option>
+                    <option value="FUND-02">FUND-02 (Opportunity Real Estate Fund)</option>
+                    <option value="FUND-03">FUND-03 (Core Income Trust)</option>
+                    <option value="GLOBAL-SPV">GLOBAL-SPV (Corporate Operating SPV)</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setQuickMapTarget(null)}
+                className="px-3.5 py-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!quickMapYardiCode.trim()}
+                onClick={handleApplyQuickMap}
+                className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Save & Apply Mapping</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {mappingNotification && (
+        <div className="fixed bottom-6 right-6 z-70 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-gray-700 flex items-center gap-2.5 text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{mappingNotification}</span>
+        </div>
       )}
 
       {/* YARDI VENDOR & ENTITY MAPPINGS MANAGER MODAL */}

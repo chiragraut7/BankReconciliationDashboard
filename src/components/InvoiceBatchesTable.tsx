@@ -546,17 +546,19 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
                             </button>
 
                             {/* Export to ERP */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenMenuId(null);
-                                onExportBatch(batch);
-                              }}
-                              className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                            >
-                              <Share2 className="w-4 h-4 text-gray-500" />
-                              <span>Sync to AP/AR</span>
-                            </button>
+                            {batch.status !== 'Exported' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  onExportBatch(batch);
+                                }}
+                                className="w-full px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                              >
+                                <Share2 className="w-4 h-4 text-gray-500" />
+                                <span>Sync to AP/AR</span>
+                              </button>
+                            )}
 
                             <div className="my-1 border-t border-gray-100" />
 

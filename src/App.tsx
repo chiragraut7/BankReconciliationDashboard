@@ -251,15 +251,6 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setIsMappingManagerOpen(true)}
-                    className="w-full sm:w-auto bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-2xs transition-colors cursor-pointer"
-                  >
-                    <Users2 className="w-4 h-4 text-[#EA580C]" />
-                    <span>Vendor & Entity Mappings</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={() => setIsCreateInvoiceBatchModalOpen(true)}
                     className="w-full sm:w-auto bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
                   >

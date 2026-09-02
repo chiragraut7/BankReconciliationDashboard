@@ -444,17 +444,19 @@ export const ViewBatchDetailsModal: React.FC<ViewBatchDetailsModalProps> = ({
             Close
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              onExportToErp(batch);
-              onClose();
-            }}
-            className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Post & Sync to ERP</span>
-          </button>
+          {batch.status !== 'Exported' && (
+            <button
+              type="button"
+              onClick={() => {
+                onExportToErp(batch);
+                onClose();
+              }}
+              className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Post & Sync to ERP</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

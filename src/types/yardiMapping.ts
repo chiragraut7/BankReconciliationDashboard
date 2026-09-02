@@ -60,6 +60,12 @@ export interface YardiEtlRecord {
   paymentTerms: string;
   notes: string; // Editable selective field (e.g. customized posting memo)
   status: string;
+  postMonth?: string;
+  expensesType?: string;
+  category?: string;
+  vendorVatNumber?: string;
+  fromDate?: string;
+  toDate?: string;
   
   // Validation Flags
   isVendorMapped: boolean;
@@ -71,6 +77,8 @@ export interface YardiEtlRecord {
   lineItemId?: string;
   splitIndex?: number;
   totalSplitsForInvoice?: number;
+  removedFromBatchId?: string;
+  removedFromBatchName?: string;
 }
 
 export interface BatchMappingValidationResult {

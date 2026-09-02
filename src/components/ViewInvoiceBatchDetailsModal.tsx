@@ -73,8 +73,10 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
   onExportToErp,
   onRemoveInvoice
 }) => {
-  // Active Workspace Tab: 'invoices' | 'loader' | 'raw'
-  const [activeTab, setActiveTab] = useState<'invoices' | 'loader' | 'raw'>('invoices');
+  // Active Workspace Tab: 'invoices' | 'loader'
+  const [activeTab, setActiveTab] = useState<'invoices' | 'loader'>(() => {
+    return batch?.status === 'Exported' ? 'loader' : 'invoices';
+  });
 
   // Format selection (sync with batch.format if valid or default to YARDI_VOYAGER_LOADER)
   const [format, setFormat] = useState<InvoiceETLFormat>(() => {
@@ -111,10 +113,15 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
 
   // Reset tab and format when batch changes
   useEffect(() => {
+    if (batch?.status === 'Exported') {
+      setActiveTab('loader');
+    } else {
+      setActiveTab('invoices');
+    }
     if (batch?.format && ['YARDI_VOYAGER_LOADER', 'NETSUITE_CSV', 'SAP_GL_FEED', 'XML_PEPPOL_UBL', 'JSON_INVOICE_STREAM'].includes(batch.format)) {
       setFormat(batch.format as InvoiceETLFormat);
     }
-  }, [batch?.id, batch?.format]);
+  }, [batch?.id, batch?.status, batch?.format]);
 
   // Unique filters from batch invoices
   const uniqueCurrencies = useMemo(() => {
@@ -466,17 +473,6 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Mapping Manager Quick Button */}
-              <button
-                type="button"
-                onClick={() => setIsMappingModalOpen(true)}
-                className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                title="Manage Yardi Vendor & Entity Code Mappings"
-              >
-                <Users2 className="w-3.5 h-3.5 text-gray-600" />
-                <span>Mappings ({vendorMappings.length}V / {entityMappings.length}E)</span>
-              </button>
-
               <button
                 type="button"
                 onClick={handleDownload}
@@ -593,21 +589,23 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
           {/* WORKSPACE NAVIGATION TABS (PARITY WITH CREATE BATCH) */}
           <div className="px-6 py-2.5 bg-white border-b border-gray-200 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab('invoices')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === 'invoices'
-                    ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <Table className="w-4 h-4" />
-                <span>1. Batch Invoices & Apportionment</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-gray-200 text-gray-800">
-                  {(batch.invoices || []).length}
-                </span>
-              </button>
+              {batch.status !== 'Exported' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('invoices')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'invoices'
+                      ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <Table className="w-4 h-4" />
+                  <span>1. Batch Invoices & Apportionment</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-gray-200 text-gray-800">
+                    {(batch.invoices || []).length}
+                  </span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -619,23 +617,10 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                 }`}
               >
                 <Layers className="w-4 h-4" />
-                <span>2. Loader File Preview & Inline Edit</span>
+                <span>{batch.status === 'Exported' ? 'Loader File Preview & Inline Edit' : '2. Loader File Preview & Inline Edit'}</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EA580C] text-white">
                   {etlRecords.length} GL Rows
                 </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('raw')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === 'raw'
-                    ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <Code className="w-4 h-4" />
-                <span>3. Raw ETL Stream ({format.split('_')[0]})</span>
               </button>
             </div>
 
@@ -652,7 +637,7 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
           <div className="flex-1 overflow-y-auto p-5 bg-[#F6F8FA]">
             
             {/* TAB 1: INVOICES & APPORTIONMENT BREAKDOWN */}
-            {activeTab === 'invoices' && (
+            {batch.status !== 'Exported' && activeTab === 'invoices' && (
               <div className="space-y-4">
                 {/* COMPILED INVOICES TABLE */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
@@ -1197,65 +1182,9 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                 onApplyNoteToInvoice={handleApplyNoteToInvoice}
                 onResetOverrides={handleResetOverrides}
                 onOpenMappingManager={() => setIsMappingModalOpen(true)}
+                batchName={batch.name}
+                batchId={batch.id}
               />
-            )}
-
-            {/* TAB 3: RAW ETL STREAM */}
-            {activeTab === 'raw' && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-xs p-5 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-900">
-                        Generated Raw Output Stream ({format})
-                      </h3>
-                      <p className="text-xs text-gray-500">
-                        Compiled from {(batch.invoices || []).length} batch invoices resulting in {etlRecords.length} granular GL ledger entries.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 mr-2">
-                      <span className="text-xs font-semibold text-gray-500">Format:</span>
-                      <select
-                        value={format}
-                        onChange={(e) => setFormat(e.target.value as InvoiceETLFormat)}
-                        className="px-2.5 py-1 text-xs bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA580C] focus:outline-hidden cursor-pointer font-semibold"
-                      >
-                        <option value="YARDI_VOYAGER_LOADER">Yardi PayScan GL Loader (CSV)</option>
-                        <option value="NETSUITE_CSV">Oracle NetSuite Feed (CSV)</option>
-                        <option value="SAP_GL_FEED">SAP General Ledger (CSV)</option>
-                        <option value="XML_PEPPOL_UBL">PEPPOL BIS Billing 3.0 (XML)</option>
-                        <option value="JSON_INVOICE_STREAM">JSON REST Payload (JSON)</option>
-                      </select>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleCopyPreview}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      {isCopiedFile ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
-                      <span>{isCopiedFile ? 'Copied!' : 'Copy Stream'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleDownload}
-                      className="px-3 py-1.5 bg-[#EA580C] hover:bg-[#D94E07] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download {format === 'XML_PEPPOL_UBL' ? 'XML' : format === 'JSON_INVOICE_STREAM' ? 'JSON' : 'CSV'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Code display box */}
-                <div className="bg-[#1E293B] text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto max-h-[500px] border border-gray-800 leading-relaxed shadow-inner">
-                  <pre>{generatedEtlContent}</pre>
-                </div>
-              </div>
             )}
           </div>
 
@@ -1270,37 +1199,41 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
             </button>
 
             <div className="flex items-center gap-3">
-              {activeTab === 'invoices' ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('loader')}
-                  className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>Preview Loader File</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('invoices')}
-                  className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to Invoices</span>
-                </button>
+              {batch.status !== 'Exported' && (
+                activeTab === 'invoices' ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('loader')}
+                    className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>Preview Loader File</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('invoices')}
+                    className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Invoices</span>
+                  </button>
+                )
               )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  if (onExportToErp) onExportToErp(batch);
-                  onClose();
-                }}
-                className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Post & Sync to ERP</span>
-              </button>
+              {batch.status !== 'Exported' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onExportToErp) onExportToErp(batch);
+                    onClose();
+                  }}
+                  className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Post & Sync to ERP</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

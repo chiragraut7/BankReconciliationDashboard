@@ -2,6 +2,96 @@ import { YardiEtlRecord, YardiVendorMapping, YardiEntityMapping, EtlRecordOverri
 import { InvoiceBatchItem, MatchedInvoice, InvoiceETLFormat } from '../types/reconciliation';
 import { findVendorMapping, findEntityMapping } from './yardiMapping';
 
+export const YARDI_VOYAGER_SCHEMA_COLUMNS = [
+  'TRANNUM',
+  'PERSON',
+  'OFFSET',
+  'ACCRUAL',
+  'POSTMONTH',
+  'DATE',
+  'DUEDATE',
+  'AMOUNT',
+  'PROPERTY',
+  'Ref_Property_Id',
+  'ACCOUNT',
+  'NOTES',
+  'REF',
+  'CHECKNUM',
+  'SEGMENT1',
+  'SEGMENT2',
+  'SEGMENT3',
+  'SEGMENT4',
+  'SEGMENT5',
+  'SEGMENT6',
+  'SEGMENT7',
+  'SEGMENT8',
+  'SEGMENT9',
+  'SEGMENT10',
+  'SEGMENT11',
+  'SEGMENT12',
+  'DetailNotes',
+  'EXPENSETYPE',
+  'DETAILTAXAMOUNT',
+  'DETAILTAXAMOUNT2',
+  'DETAILTRANAMOUNT',
+  'DETAILVATRANTYPEID',
+  'DETAILVATRATEID',
+  'TRANCURRENCY',
+  'EXCHANGERATE',
+  'EXCHANGERATEDATE',
+  'EXCHANGEFACTOR',
+  'EXCHANGEOVERRIDE',
+  'AMOUNT2',
+  'FROMDATE',
+  'TODATE',
+  'DOCUMENTSEQUENCENUMBER',
+  'DISPLAYTYPE',
+  'INTERNATIONALSEQUENCENO',
+  'NOTES2',
+  'DETAILVATRANTYPEID',
+  'DETAILVATRATEID',
+  'Labour',
+  'Material',
+  'CITBLevy',
+  'Manufacturing',
+  'Travel',
+  'NonCisLabor',
+  'FundingEntity',
+  'JOB',
+  'CATEGORY',
+  'CONTRACT',
+  'COSTCODE',
+  'USERDEF1',
+  'USERDEF2',
+  'UserDefined3',
+  'UserDefined4',
+  'UserDefined5',
+  'UserDefined6',
+  'UserDefined7',
+  'UserDefined8',
+  'UserDefined9',
+  'UserDefined10',
+  'WORKFLOWSTATUS',
+  'WORKFLOWUSER',
+  'WORKFLOWDATE',
+  'DETAILFIELD1',
+  'DETAILFIELD2',
+  'DETAILFIELD3',
+  'DETAILFIELD4',
+  'DETAILFIELD5',
+  'DETAILFIELD6',
+  'DETAILFIELD7',
+  'DETAILFIELD8',
+  'ISCONSOLIDATED',
+  'CREDITMEMO',
+  'ADJUSTMENT',
+  'Material',
+  'CITBLevy',
+  'Manufacturing',
+  'Travel',
+  'NonCisLabor'
+] as const;
+
 /**
  * Generates granular, exploded ETL records for an array of invoices,
  * splitting each invoice by its constituent line items AND allocated entities.
@@ -32,6 +122,12 @@ export function generateInvoiceEtlRecords(
     const poNumber = inv.poNumber || '';
     const jobNumber = inv.jobNumber || '';
     const paymentTerms = inv.paymentTerms || 'Net 30 days';
+    const postMonth = inv.postMonth || `${invoiceDate.slice(5, 7)}/${invoiceDate.slice(0, 4)}`;
+    const expensesType = inv.expensesType || 'EXP';
+    const category = inv.category || 'OPEX Services';
+    const vendorVatNumber = inv.vendorVatNumber || '';
+    const fromDate = inv.fromDate || invoiceDate;
+    const toDate = inv.toDate || dueDate;
 
     // Case 1: Invoice has structured richLineItems
     if (inv.richLineItems && inv.richLineItems.length > 0) {
@@ -106,13 +202,21 @@ export function generateInvoiceEtlRecords(
               paymentTerms,
               notes,
               status: inv.status || 'Verified',
+              postMonth,
+              expensesType,
+              category,
+              vendorVatNumber,
+              fromDate,
+              toDate,
               isVendorMapped,
               isEntityMapped,
               hasMappingError,
               mappingErrorMessage,
               lineItemId: lineItem.id || `LI-${lineIdx + 1}`,
               splitIndex: splitIdx + 1,
-              totalSplitsForInvoice: lineItem.splits.length
+              totalSplitsForInvoice: lineItem.splits.length,
+              removedFromBatchId: inv.removedFromBatchId,
+              removedFromBatchName: inv.removedFromBatchName
             });
           });
         }
@@ -180,13 +284,21 @@ export function generateInvoiceEtlRecords(
               paymentTerms,
               notes,
               status: inv.status || 'Verified',
+              postMonth,
+              expensesType,
+              category,
+              vendorVatNumber,
+              fromDate,
+              toDate,
               isVendorMapped,
               isEntityMapped,
               hasMappingError,
               mappingErrorMessage,
               lineItemId: lineItem.id || `LI-${lineIdx + 1}`,
               splitIndex: appIdx + 1,
-              totalSplitsForInvoice: inv.apportionment!.length
+              totalSplitsForInvoice: inv.apportionment!.length,
+              removedFromBatchId: inv.removedFromBatchId,
+              removedFromBatchName: inv.removedFromBatchName
             });
           });
         }
@@ -248,13 +360,21 @@ export function generateInvoiceEtlRecords(
             paymentTerms,
             notes,
             status: inv.status || 'Verified',
+            postMonth,
+            expensesType,
+            category,
+            vendorVatNumber,
+            fromDate,
+            toDate,
             isVendorMapped,
             isEntityMapped,
             hasMappingError,
             mappingErrorMessage,
             lineItemId: lineItem.id || `LI-${lineIdx + 1}`,
             splitIndex: 1,
-            totalSplitsForInvoice: 1
+            totalSplitsForInvoice: 1,
+            removedFromBatchId: inv.removedFromBatchId,
+            removedFromBatchName: inv.removedFromBatchName
           });
         }
       });
@@ -324,13 +444,21 @@ export function generateInvoiceEtlRecords(
           paymentTerms,
           notes,
           status: inv.status || 'Verified',
+          postMonth,
+          expensesType,
+          category,
+          vendorVatNumber,
+          fromDate,
+          toDate,
           isVendorMapped,
           isEntityMapped,
           hasMappingError,
           mappingErrorMessage,
           lineItemId: `APPORTION-${appIdx + 1}`,
           splitIndex: appIdx + 1,
-          totalSplitsForInvoice: inv.apportionment!.length
+          totalSplitsForInvoice: inv.apportionment!.length,
+          removedFromBatchId: inv.removedFromBatchId,
+          removedFromBatchName: inv.removedFromBatchName
         });
       });
     }
@@ -397,13 +525,21 @@ export function generateInvoiceEtlRecords(
         paymentTerms,
         notes,
         status: inv.status || 'Verified',
+        postMonth,
+        expensesType,
+        category,
+        vendorVatNumber,
+        fromDate,
+        toDate,
         isVendorMapped,
         isEntityMapped,
         hasMappingError,
         mappingErrorMessage,
         lineItemId: 'LI-SINGLE-1',
         splitIndex: 1,
-        totalSplitsForInvoice: 1
+        totalSplitsForInvoice: 1,
+        removedFromBatchId: inv.removedFromBatchId,
+        removedFromBatchName: inv.removedFromBatchName
       });
     }
   });
@@ -412,54 +548,107 @@ export function generateInvoiceEtlRecords(
 }
 
 /**
- * Exports records to standard Yardi Voyager / PayScan Loader CSV format.
- * Includes header:
- * Batch_Num,Property_Code,Vendor_Code,Invoice_Num,Invoice_Date,Due_Date,GL_Account_Code,Amount,Tax_Amount,Currency,Description,PO_Number,Job_Number,Notes,Split_Percent,Status
+ * Exports records to standard Yardi Voyager / PayScan Loader CSV format matching the exact
+ * 87 columns from the Yardi loader specification.
  */
 export function exportToYardiVoyagerCsv(records: YardiEtlRecord[]): string {
-  const header = [
-    'BATCH_NUM',
-    'PROPERTY_CODE',
-    'VENDOR_CODE',
-    'INVOICE_NUM',
-    'INVOICE_DATE',
-    'DUE_DATE',
-    'GL_ACCOUNT_CODE',
-    'AMOUNT',
-    'TAX_AMOUNT',
-    'CURRENCY',
-    'DESCRIPTION',
-    'PO_NUMBER',
-    'JOB_NUMBER',
-    'NOTES',
-    'SPLIT_PERCENT',
-    'OUR_ENTITY_NAME',
-    'OUR_VENDOR_NAME',
-    'STATUS'
-  ].join(',');
+  const header = YARDI_VOYAGER_SCHEMA_COLUMNS.join(',');
 
-  const rows = records.map(r => {
-    const escapeCsv = (val: string | number) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-    return [
-      escapeCsv(r.batchId),
-      escapeCsv(r.yardiEntityCode || 'UNMAPPED'),
-      escapeCsv(r.yardiVendorCode || 'UNMAPPED'),
-      escapeCsv(r.invoiceNumber),
-      escapeCsv(r.invoiceDate),
-      escapeCsv(r.dueDate),
-      escapeCsv(r.glCode),
-      r.apportionedGrossAmount.toFixed(2),
-      r.apportionedTaxAmount.toFixed(2),
-      escapeCsv(r.currency),
-      escapeCsv(r.lineDescription),
-      escapeCsv(r.poNumber),
-      escapeCsv(r.jobNumber),
-      escapeCsv(r.notes),
-      r.splitPercent.toFixed(2),
-      escapeCsv(r.ourEntityName),
-      escapeCsv(r.ourVendorName),
-      escapeCsv(r.status)
-    ].join(',');
+  const rows = records.map((r, rowIdx) => {
+    const escapeCsv = (val: string | number | undefined | null) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    
+    // Exact column values matching YARDI_VOYAGER_SCHEMA_COLUMNS:
+    const colValues = [
+      escapeCsv(r.invoiceNumber || `TRN-${rowIdx + 1}`), // TRANNUM
+      escapeCsv(r.yardiVendorCode || 'UNMAPPED'), // PERSON (Yardi Vendor Code)
+      escapeCsv('2000'), // OFFSET (Payable Offset Account)
+      escapeCsv('0'), // ACCRUAL
+      escapeCsv(r.postMonth || '08/2026'), // POSTMONTH
+      escapeCsv(r.invoiceDate), // DATE
+      escapeCsv(r.dueDate), // DUEDATE
+      r.apportionedGrossAmount.toFixed(2), // AMOUNT
+      escapeCsv(r.yardiEntityCode || 'UNMAPPED'), // PROPERTY (Yardi Property Code)
+      escapeCsv(r.ourEntityCode || r.yardiEntityCode || 'PROP-01'), // Ref_Property_Id
+      escapeCsv(r.glCode), // ACCOUNT (GL Account Code)
+      escapeCsv(r.notes || r.lineDescription), // NOTES
+      escapeCsv(r.invoiceNumber), // REF
+      escapeCsv(r.poNumber || ''), // CHECKNUM
+      escapeCsv(r.yardiEntityCode || ''), // SEGMENT1
+      escapeCsv('FUND-01'), // SEGMENT2
+      escapeCsv('DEPT-OPS'), // SEGMENT3
+      escapeCsv(''), // SEGMENT4
+      escapeCsv(''), // SEGMENT5
+      escapeCsv(''), // SEGMENT6
+      escapeCsv(''), // SEGMENT7
+      escapeCsv(''), // SEGMENT8
+      escapeCsv(''), // SEGMENT9
+      escapeCsv(''), // SEGMENT10
+      escapeCsv(''), // SEGMENT11
+      escapeCsv(''), // SEGMENT12
+      escapeCsv(r.lineDescription), // DetailNotes
+      escapeCsv(r.expensesType || 'EXP'), // EXPENSETYPE
+      r.apportionedTaxAmount.toFixed(2), // DETAILTAXAMOUNT
+      '0.00', // DETAILTAXAMOUNT2
+      r.apportionedGrossAmount.toFixed(2), // DETAILTRANAMOUNT
+      escapeCsv('STANDARD'), // DETAILVATRANTYPEID
+      escapeCsv(r.currency === 'GBP' ? 'UK_VAT_20' : 'US_SALES_TAX'), // DETAILVATRATEID
+      escapeCsv(r.currency), // TRANCURRENCY
+      r.exchangeRate.toFixed(4), // EXCHANGERATE
+      escapeCsv(r.invoiceDate), // EXCHANGERATEDATE
+      '1.0000', // EXCHANGEFACTOR
+      'N', // EXCHANGEOVERRIDE
+      r.apportionedUsdAmount.toFixed(2), // AMOUNT2 (USD Amount)
+      escapeCsv(r.fromDate || r.invoiceDate), // FROMDATE
+      escapeCsv(r.toDate || r.dueDate), // TODATE
+      escapeCsv(r.invoiceDisplayId || r.invoiceNumber), // DOCUMENTSEQUENCENUMBER
+      escapeCsv('INVOICE'), // DISPLAYTYPE
+      escapeCsv(r.id), // INTERNATIONALSEQUENCENO
+      escapeCsv(r.lineDescription), // NOTES2
+      escapeCsv('STANDARD'), // DETAILVATRANTYPEID
+      escapeCsv('TAX_STD'), // DETAILVATRATEID
+      '0.00', // Labour
+      r.apportionedGrossAmount.toFixed(2), // Material
+      '0.00', // CITBLevy
+      '0.00', // Manufacturing
+      '0.00', // Travel
+      '0.00', // NonCisLabor
+      escapeCsv(r.ourEntityName), // FundingEntity
+      escapeCsv(r.jobNumber || 'JOB-2026'), // JOB
+      escapeCsv(r.category || 'OPEX Services'), // CATEGORY
+      escapeCsv(r.poNumber || ''), // CONTRACT
+      escapeCsv(r.glCode), // COSTCODE
+      escapeCsv(r.ourVendorName), // USERDEF1
+      escapeCsv(r.ourEntityName), // USERDEF2
+      escapeCsv(''), // UserDefined3
+      escapeCsv(''), // UserDefined4
+      escapeCsv(''), // UserDefined5
+      escapeCsv(''), // UserDefined6
+      escapeCsv(''), // UserDefined7
+      escapeCsv(''), // UserDefined8
+      escapeCsv(''), // UserDefined9
+      escapeCsv(''), // UserDefined10
+      escapeCsv('APPROVED'), // WORKFLOWSTATUS
+      escapeCsv('SYSTEM_RECON'), // WORKFLOWUSER
+      escapeCsv(r.invoiceDate), // WORKFLOWDATE
+      escapeCsv(''), // DETAILFIELD1
+      escapeCsv(''), // DETAILFIELD2
+      escapeCsv(''), // DETAILFIELD3
+      escapeCsv(''), // DETAILFIELD4
+      escapeCsv(''), // DETAILFIELD5
+      escapeCsv(''), // DETAILFIELD6
+      escapeCsv(''), // DETAILFIELD7
+      escapeCsv(''), // DETAILFIELD8
+      escapeCsv('N'), // ISCONSOLIDATED
+      escapeCsv('N'), // CREDITMEMO
+      escapeCsv('N'), // ADJUSTMENT
+      r.apportionedGrossAmount.toFixed(2), // Material
+      '0.00', // CITBLevy
+      '0.00', // Manufacturing
+      '0.00', // Travel
+      '0.00' // NonCisLabor
+    ];
+
+    return colValues.join(',');
   });
 
   return [header, ...rows].join('\n');

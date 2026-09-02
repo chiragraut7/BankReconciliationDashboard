@@ -16,11 +16,14 @@ import {
   Users2,
   FileSpreadsheet,
   CornerDownRight,
-  Info
+  Info,
+  TableProperties,
+  LayoutGrid
 } from 'lucide-react';
 import { YardiEtlRecord, EtlRecordOverride } from '../types/yardiMapping';
 import { InvoiceETLFormat } from '../types/reconciliation';
 import { formatCurrency } from '../utils/formatters';
+import { YARDI_VOYAGER_SCHEMA_COLUMNS, exportToYardiVoyagerCsv } from '../utils/yardiEtlEngine';
 
 interface EtlLoaderPreviewTableProps {
   records: YardiEtlRecord[];
@@ -30,7 +33,9 @@ interface EtlLoaderPreviewTableProps {
   onUpdateRecordOverride: (recordId: string, override: Partial<EtlRecordOverride>) => void;
   onApplyNoteToInvoice: (invoiceId: string, note: string) => void;
   onResetOverrides: () => void;
-  onOpenMappingManager: () => void;
+  onOpenMappingManager?: () => void;
+  batchName?: string;
+  batchId?: string;
 }
 
 export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
@@ -41,15 +46,18 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
   onUpdateRecordOverride,
   onApplyNoteToInvoice,
   onResetOverrides,
-  onOpenMappingManager
+  onOpenMappingManager,
+  batchName,
+  batchId
 }) => {
+  const [viewMode, setViewMode] = useState<'essential' | 'yardi_schema'>('essential');
   const [searchQuery, setSearchQuery] = useState('');
   const [entityFilter, setEntityFilter] = useState('all');
   const [vendorFilter, setVendorFilter] = useState('all');
-  const [onlyErrorsFilter, setOnlyErrorsFilter] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [tempNoteText, setTempNoteText] = useState('');
   const [copiedNotification, setCopiedNotification] = useState(false);
+  const [downloadNotification, setDownloadNotification] = useState<string | null>(null);
 
   // Derive unique lists for filters
   const uniqueEntities = Array.from(new Set(records.map(r => r.ourEntityName))).sort();
@@ -57,7 +65,6 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
 
   // Filter records
   const filteredRecords = records.filter(r => {
-    if (onlyErrorsFilter && !r.hasMappingError) return false;
     if (entityFilter !== 'all' && r.ourEntityName !== entityFilter) return false;
     if (vendorFilter !== 'all' && r.ourVendorName !== vendorFilter) return false;
     if (!searchQuery.trim()) return true;
@@ -91,6 +98,33 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
       onUpdateRecordOverride(record.id, { notes: tempNoteText });
     }
     setEditingNoteId(null);
+  };
+
+  // Download CSV Handler
+  const handleDownloadCsv = (exportRecords: YardiEtlRecord[] = records, scopeLabel: string = 'All') => {
+    if (exportRecords.length === 0) {
+      alert('No records to download.');
+      return;
+    }
+    const csvContent = exportToYardiVoyagerCsv(exportRecords);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const safeName = (batchName || batchId || 'Batch')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_');
+    const timestamp = new Date().toISOString().slice(0, 10);
+    link.download = `${safeName}_Yardi_Voyager_Loader_${timestamp}.csv`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setDownloadNotification(`Downloaded ${exportRecords.length} records (${scopeLabel}) as Yardi Voyager CSV`);
+    setTimeout(() => setDownloadNotification(null), 3500);
   };
 
   return (
@@ -130,35 +164,197 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
               <option key={v} value={v}>{v}</option>
             ))}
           </select>
-
-          <button
-            onClick={() => setOnlyErrorsFilter(!onlyErrorsFilter)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border ${
-              onlyErrorsFilter
-                ? 'bg-amber-100 border-amber-300 text-amber-900'
-                : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-            <span>Missing Mappings Only ({totalErrorCount})</span>
-          </button>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* VIEW MODE TOGGLE */}
+          <div className="flex items-center bg-gray-200/80 p-0.5 rounded-lg border border-gray-300">
+            <button
+              onClick={() => setViewMode('essential')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'essential'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Standard GL View</span>
+            </button>
+            <button
+              onClick={() => setViewMode('yardi_schema')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'yardi_schema'
+                  ? 'bg-[#EA580C] text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <TableProperties className="w-3.5 h-3.5" />
+              <span>Yardi Voyager (87 Cols)</span>
+            </button>
+          </div>
+
+          {/* CSV DOWNLOAD BUTTON */}
           <button
-            onClick={onOpenMappingManager}
-            className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            type="button"
+            onClick={() => handleDownloadCsv(records, 'All Records')}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            title="Download full 87-column Yardi Voyager PayScan CSV Loader file"
           >
-            <Users2 className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Edit Code Mappings</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Download CSV</span>
+            <span className="ml-0.5 px-1.5 py-0.2 bg-emerald-700/80 text-[10px] rounded-full font-mono">
+              {records.length}
+            </span>
           </button>
         </div>
       </div>
 
+      {/* DOWNLOAD SUCCESS TOAST BANNER */}
+      {downloadNotification && (
+        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-xs text-emerald-900 animate-in fade-in duration-150">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-semibold">{downloadNotification}</span>
+        </div>
+      )}
+
+      {/* SCHEMA INFO BADGE */}
+      {viewMode === 'yardi_schema' && (
+        <div className="p-2.5 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between gap-2 text-xs text-orange-950">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-[#EA580C] text-white rounded font-mono font-bold text-[10px]">
+              YARDI SCHEMA
+            </span>
+            <span className="font-semibold">
+              Export format matches all 87 standard Yardi Voyager / PayScan fields (TRANNUM, PERSON, OFFSET, ACCRUAL, POSTMONTH, PROPERTY, Ref_Property_Id, ACCOUNT, NOTES, REF, SEGMENTS, EXPENSETYPE, TRANCURRENCY, JOB, CATEGORY, etc.)
+            </span>
+          </div>
+          <span className="text-[11px] font-mono text-orange-800 font-bold">87 / 87 Columns</span>
+        </div>
+      )}
+
       {/* INTERACTIVE EDITABLE LOADER TABLE */}
       <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs">
         <div className="overflow-x-auto max-h-[520px]">
-          <table className="w-full text-left border-collapse text-xs">
+          {viewMode === 'yardi_schema' ? (
+            /* YARDI 87 COLUMN TABLE */
+            <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+              <thead className="sticky top-0 z-10 bg-gray-900 text-gray-100 border-b border-gray-800 text-[10px] font-mono uppercase tracking-wider">
+                <tr>
+                  <th className="py-2.5 px-3 w-10 text-center bg-gray-950">#</th>
+                  {YARDI_VOYAGER_SCHEMA_COLUMNS.map((colName, cIdx) => (
+                    <th key={`${colName}-${cIdx}`} className="py-2.5 px-3 font-semibold border-r border-gray-800">
+                      {colName}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 font-mono text-[11px]">
+                {filteredRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={YARDI_VOYAGER_SCHEMA_COLUMNS.length + 1} className="py-12 text-center text-gray-500 font-sans">
+                      <Info className="w-6 h-6 mx-auto text-gray-400 mb-2" />
+                      <div className="font-semibold">No ETL records matching current filters</div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRecords.map((r, idx) => {
+                    const colVals = [
+                      r.invoiceNumber || `TRN-${idx + 1}`, // TRANNUM
+                      r.yardiVendorCode || 'UNMAPPED', // PERSON
+                      '2000', // OFFSET
+                      '0', // ACCRUAL
+                      r.postMonth || '08/2026', // POSTMONTH
+                      r.invoiceDate, // DATE
+                      r.dueDate, // DUEDATE
+                      r.apportionedGrossAmount.toFixed(2), // AMOUNT
+                      r.yardiEntityCode || 'UNMAPPED', // PROPERTY
+                      r.ourEntityCode || r.yardiEntityCode || 'PROP-01', // Ref_Property_Id
+                      r.glCode, // ACCOUNT
+                      r.notes || r.lineDescription, // NOTES
+                      r.invoiceNumber, // REF
+                      r.poNumber || '', // CHECKNUM
+                      r.yardiEntityCode || '', // SEGMENT1
+                      'FUND-01', // SEGMENT2
+                      'DEPT-OPS', // SEGMENT3
+                      '', '', '', '', '', '', '', '', '', // SEGMENT4-12
+                      r.lineDescription, // DetailNotes
+                      r.expensesType || 'EXP', // EXPENSETYPE
+                      r.apportionedTaxAmount.toFixed(2), // DETAILTAXAMOUNT
+                      '0.00', // DETAILTAXAMOUNT2
+                      r.apportionedGrossAmount.toFixed(2), // DETAILTRANAMOUNT
+                      'STANDARD', // DETAILVATRANTYPEID
+                      r.currency === 'GBP' ? 'UK_VAT_20' : 'US_SALES_TAX', // DETAILVATRATEID
+                      r.currency, // TRANCURRENCY
+                      r.exchangeRate.toFixed(4), // EXCHANGERATE
+                      r.invoiceDate, // EXCHANGERATEDATE
+                      '1.0000', // EXCHANGEFACTOR
+                      'N', // EXCHANGEOVERRIDE
+                      r.apportionedUsdAmount.toFixed(2), // AMOUNT2
+                      r.fromDate || r.invoiceDate, // FROMDATE
+                      r.toDate || r.dueDate, // TODATE
+                      r.invoiceDisplayId || r.invoiceNumber, // DOCUMENTSEQUENCENUMBER
+                      'INVOICE', // DISPLAYTYPE
+                      r.id, // INTERNATIONALSEQUENCENO
+                      r.lineDescription, // NOTES2
+                      'STANDARD', // DETAILVATRANTYPEID
+                      'TAX_STD', // DETAILVATRATEID
+                      '0.00', // Labour
+                      r.apportionedGrossAmount.toFixed(2), // Material
+                      '0.00', // CITBLevy
+                      '0.00', // Manufacturing
+                      '0.00', // Travel
+                      '0.00', // NonCisLabor
+                      r.ourEntityName, // FundingEntity
+                      r.jobNumber || 'JOB-2026', // JOB
+                      r.category || 'OPEX Services', // CATEGORY
+                      r.poNumber || '', // CONTRACT
+                      r.glCode, // COSTCODE
+                      r.ourVendorName, // USERDEF1
+                      r.ourEntityName, // USERDEF2
+                      '', '', '', '', '', '', '', '', // UserDefined3-10
+                      'APPROVED', // WORKFLOWSTATUS
+                      'SYSTEM_RECON', // WORKFLOWUSER
+                      r.invoiceDate, // WORKFLOWDATE
+                      '', '', '', '', '', '', '', '', // DETAILFIELD1-8
+                      'N', // ISCONSOLIDATED
+                      'N', // CREDITMEMO
+                      'N', // ADJUSTMENT
+                      r.apportionedGrossAmount.toFixed(2), // Material
+                      '0.00', // CITBLevy
+                      '0.00', // Manufacturing
+                      '0.00', // Travel
+                      '0.00' // NonCisLabor
+                    ];
+
+                    return (
+                      <tr key={r.id} className={r.hasMappingError ? 'bg-amber-50/60' : 'hover:bg-gray-50'}>
+                        <td className="py-2 px-3 text-center text-[10px] text-gray-400 bg-gray-50 border-r border-gray-200">
+                          {idx + 1}
+                        </td>
+                        {colVals.map((val, cIdx) => {
+                          const isError = (cIdx === 1 && !r.isVendorMapped) || (cIdx === 8 && !r.isEntityMapped);
+                          return (
+                            <td
+                              key={cIdx}
+                              className={`py-2 px-3 border-r border-gray-100 ${
+                                isError
+                                  ? 'bg-amber-100 text-amber-900 font-bold'
+                                  : 'text-gray-700'
+                              }`}
+                            >
+                              {val || <span className="text-gray-300">-</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          ) : (
+            /* STANDARD ESSENTIAL TABLE */
+            <table className="w-full text-left border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-gray-100/95 backdrop-blur-xs border-b border-gray-200 text-gray-700 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-center">#</th>
@@ -172,7 +368,7 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
                 <th className="py-2.5 px-3 text-right">Tax / VAT</th>
                 <th className="py-2.5 px-3 text-center">Curr</th>
                 <th className="py-2.5 px-3 min-w-[220px]">Notes / Memo (Editable)</th>
-                <th className="py-2.5 px-3 text-center">Status</th>
+                <th className="py-2.5 px-3 text-center min-w-[130px]">Come From ID</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -367,17 +563,15 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
                         )}
                       </td>
 
-                      {/* STATUS */}
+                      {/* COME FROM ID */}
                       <td className="py-2 px-3 text-center">
-                        {r.hasMappingError ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300" title={r.mappingErrorMessage}>
-                            <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
-                            Unmapped
+                        {r.removedFromBatchId ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200" title={`Previously from ${r.removedFromBatchId}`}>
+                            {r.removedFromBatchId}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <Check className="w-2.5 h-2.5 text-emerald-600" />
-                            Ready
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                            {r.invoiceDisplayId || r.invoiceId || 'New'}
                           </span>
                         )}
                       </td>
@@ -387,6 +581,7 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
               )}
             </tbody>
           </table>
+          )}
         </div>
       </div>
     </div>
