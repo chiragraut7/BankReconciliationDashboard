@@ -28,7 +28,9 @@ import {
   Table,
   Code,
   Copy,
-  Users2
+  Users2,
+  Lock,
+  Plus
 } from 'lucide-react';
 import { InvoiceBatch, ReconciliationRun, MatchedInvoice, InvoiceBatchItem, InvoiceETLFormat } from '../types/reconciliation';
 import { InvoiceDetailModal } from './InvoiceDetailModal';
@@ -49,6 +51,7 @@ import {
   saveStoredEntityMappings,
   validateBatchMappings,
   findEntityMapping,
+  findVendorMapping,
   generateAutoYardiVendorCode,
   generateAutoYardiEntityCode
 } from '../utils/yardiMapping';
@@ -90,6 +93,7 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
   const [vendorMappings, setVendorMappings] = useState<YardiVendorMapping[]>(() => getStoredVendorMappings());
   const [entityMappings, setEntityMappings] = useState<YardiEntityMapping[]>(() => getStoredEntityMappings());
   const [isMappingModalOpen, setIsMappingModalOpen] = useState<boolean>(false);
+  const [mappingNotification, setMappingNotification] = useState<string | null>(null);
 
   // ETL Record Field Overrides (Selective user edits on notes, GL code, descriptions)
   const [recordOverrides, setRecordOverrides] = useState<Record<string, EtlRecordOverride>>({});
@@ -103,6 +107,15 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
   const [copiedRef, setCopiedRef] = useState<string | null>(null);
   const [isCopiedFile, setIsCopiedFile] = useState<boolean>(false);
   const [inspectingInvoice, setInspectingInvoice] = useState<MatchedInvoice | null>(null);
+
+  // Quick Map dialog state for inline counterparty mapping
+  const [quickMapTarget, setQuickMapTarget] = useState<{
+    type: 'vendor' | 'entity';
+    name: string;
+    originalCode?: string;
+  } | null>(null);
+  const [quickMapYardiCode, setQuickMapYardiCode] = useState<string>('');
+  const [quickMapGlOrFund, setQuickMapGlOrFund] = useState<string>('GL-6000 OPEX');
 
   // Date Range & Sorting State
   const [startDate, setStartDate] = useState<string>('');
@@ -254,6 +267,123 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
     setEntityMappings(updatedE);
     saveStoredVendorMappings(updatedV);
     saveStoredEntityMappings(updatedE);
+  };
+
+  // Check whether any counterparty (vendor) or entity is unmapped for this batch
+  const hasUnmapped = Boolean(
+    batch &&
+    batch.status !== 'Exported' &&
+    (!batchValidation.isValid || batchValidation.errorRecordsCount > 0 || (batchValidation.missingVendors?.length || 0) > 0 || (batchValidation.missingEntities?.length || 0) > 0)
+  );
+
+  // Enforce rule: cannot go to Loader File Preview step until all vendors and entities are mapped
+  useEffect(() => {
+    if (batch && batch.status !== 'Exported' && hasUnmapped && activeTab === 'loader') {
+      setActiveTab('invoices');
+    }
+  }, [batch?.id, batch?.status, hasUnmapped, activeTab]);
+
+  // Open Quick Map Dialog for a specific unmapped Vendor or Entity
+  const handleOpenQuickMap = (type: 'vendor' | 'entity', name: string, originalCode?: string) => {
+    const defaultCode = type === 'vendor' 
+      ? generateAutoYardiVendorCode(name)
+      : generateAutoYardiEntityCode(name);
+
+    setQuickMapTarget({
+      type,
+      name,
+      originalCode
+    });
+    setQuickMapYardiCode(defaultCode);
+    setQuickMapGlOrFund(type === 'vendor' ? 'GL-6000 OPEX' : 'FUND-01');
+  };
+
+  // Apply Quick Map changes
+  const handleApplyQuickMap = () => {
+    if (!quickMapTarget || !quickMapYardiCode.trim()) return;
+
+    const trimmedCode = quickMapYardiCode.trim().toUpperCase();
+
+    if (quickMapTarget.type === 'vendor') {
+      const existingIdx = vendorMappings.findIndex(
+        v => v.ourVendorName.toLowerCase() === quickMapTarget.name.toLowerCase()
+      );
+      let updated: YardiVendorMapping[];
+      if (existingIdx >= 0) {
+        updated = [...vendorMappings];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          yardiVendorCode: trimmedCode,
+          yardiVendorName: `${quickMapTarget.name} (PayScan)`,
+          defaultGlAccount: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+      } else {
+        const newMap: YardiVendorMapping = {
+          id: `v-map-${Date.now()}`,
+          ourVendorName: quickMapTarget.name,
+          ourVendorCode: quickMapTarget.originalCode || `VND-${quickMapTarget.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`,
+          yardiVendorCode: trimmedCode,
+          yardiVendorName: `${quickMapTarget.name} (PayScan)`,
+          defaultGlAccount: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+        updated = [newMap, ...vendorMappings];
+      }
+      setVendorMappings(updated);
+      saveStoredVendorMappings(updated);
+      setMappingNotification(`✓ Successfully mapped vendor "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}`);
+    } else {
+      const existingIdx = entityMappings.findIndex(
+        e => e.ourEntityName.toLowerCase() === quickMapTarget.name.toLowerCase()
+      );
+      let updated: YardiEntityMapping[];
+      if (existingIdx >= 0) {
+        updated = [...entityMappings];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          yardiEntityCode: trimmedCode,
+          yardiEntityName: `${quickMapTarget.name} (Property)`,
+          fundCode: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+      } else {
+        const newMap: YardiEntityMapping = {
+          id: `e-map-${Date.now()}`,
+          ourEntityName: quickMapTarget.name,
+          ourEntityCode: quickMapTarget.originalCode || `PROP-${quickMapTarget.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`,
+          yardiEntityCode: trimmedCode,
+          yardiEntityName: `${quickMapTarget.name} (Property)`,
+          fundCode: quickMapGlOrFund,
+          status: 'Mapped'
+        };
+        updated = [newMap, ...entityMappings];
+      }
+      setEntityMappings(updated);
+      saveStoredEntityMappings(updated);
+      setMappingNotification(`✓ Successfully mapped property "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}`);
+    }
+
+    setQuickMapTarget(null);
+    setTimeout(() => {
+      setMappingNotification(null);
+    }, 4500);
+  };
+
+  // Handler to safely navigate to Tab 2 (Loader File Preview & Inline Edit)
+  const handleGoToLoaderTab = () => {
+    if (batch && batch.status !== 'Exported' && hasUnmapped) {
+      const missingVendorsCount = (batchValidation.missingVendors || []).length;
+      const missingEntitiesCount = (batchValidation.missingEntities || []).length;
+
+      setMappingNotification(
+        `⛔ Cannot proceed to next screen: All required mapping must happen in this batch screen first (${missingVendorsCount} vendor(s), ${missingEntitiesCount} entity/entities unmapped). Please configure property and vendor mapping for the highlighted items below.`
+      );
+      setTimeout(() => setMappingNotification(null), 6000);
+      return;
+    }
+
+    setActiveTab('loader');
   };
 
   const handleDatePresetChange = (preset: 'All' | 'Last7Days' | 'Last30Days' | 'Aug2026' | 'Sep2026' | 'Custom') => {
@@ -551,38 +681,20 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
             </div>
           </div>
 
-          {/* MAPPING WARNING BANNER (IF UNMAPPED COUNTERPARTIES EXIST) */}
-          {batchValidation.errorRecordsCount > 0 && (
-            <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between shrink-0 animate-in slide-in-from-top-1">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                <div className="text-xs text-amber-900">
-                  <strong>Mapping Alert:</strong> {batchValidation.errorRecordsCount} item(s) in this batch reference unmapped counterparties or legal entities.
-                  {(batchValidation.missingVendors || []).length > 0 && (
-                    <span className="ml-1">Vendors: <code className="bg-amber-100 px-1 rounded">{(batchValidation.missingVendors || []).join(', ')}</code></span>
-                  )}
-                  {(batchValidation.missingEntities || []).length > 0 && (
-                    <span className="ml-1">• Entities: <code className="bg-amber-100 px-1 rounded">{(batchValidation.missingEntities || []).join(', ')}</code></span>
-                  )}
-                </div>
+          {/* TEMPORARY TOAST/NOTIFICATION */}
+          {mappingNotification && (
+            <div className="bg-amber-100 border-b border-amber-300 px-6 py-2.5 flex items-center justify-between text-xs font-semibold text-amber-900 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>{mappingNotification}</span>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleAutoMapBatchMissing}
-                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Auto-Map All Missing</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsMappingModalOpen(true)}
-                  className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-xs font-bold cursor-pointer transition-colors"
-                >
-                  Configure Manually &rarr;
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setMappingNotification(null)}
+                className="text-amber-800 hover:text-amber-950 font-bold ml-4 cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -609,18 +721,35 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
 
               <button
                 type="button"
-                onClick={() => setActiveTab('loader')}
+                onClick={handleGoToLoaderTab}
                 className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === 'loader'
+                  hasUnmapped
+                    ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
+                    : activeTab === 'loader'
                     ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
+                title={
+                  hasUnmapped
+                    ? 'All vendors and entities must be mapped before proceeding to Loader File Preview'
+                    : 'Switch to Loader File Preview & Inline Edit'
+                }
               >
-                <Layers className="w-4 h-4" />
+                {hasUnmapped ? (
+                  <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                ) : (
+                  <Layers className="w-4 h-4 shrink-0" />
+                )}
                 <span>{batch.status === 'Exported' ? 'Loader File Preview & Inline Edit' : '2. Loader File Preview & Inline Edit'}</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EA580C] text-white">
-                  {etlRecords.length} GL Rows
-                </span>
+                {hasUnmapped ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                    Mapping Required
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EA580C] text-white">
+                    {etlRecords.length} GL Rows
+                  </span>
+                )}
               </button>
             </div>
 
@@ -639,24 +768,75 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
             {/* TAB 1: INVOICES & APPORTIONMENT BREAKDOWN */}
             {batch.status !== 'Exported' && activeTab === 'invoices' && (
               <div className="space-y-4">
+                {/* REQUIRED MAPPING STATUS & PROCEED BANNER */}
+                {hasUnmapped ? (
+                  <div className="bg-amber-50/90 border-2 border-amber-400 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-amber-100 text-amber-800 rounded-lg shrink-0 border border-amber-300">
+                        <AlertTriangle className="w-5 h-5 text-amber-700" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-amber-950">
+                            Required Mapping Pending in Batch Screen
+                          </h4>
+                          <span className="px-2 py-0.5 bg-amber-200 text-amber-950 rounded-full text-[10px] font-extrabold border border-amber-400">
+                            {(batchValidation.missingVendors?.length || 0) + (batchValidation.missingEntities?.length || 0)} Counterparties Unmapped
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-900 mt-0.5">
+                          Required property and vendor mappings must happen on this batch screen before proceeding to the next screen. Click the amber <strong className="font-semibold">+ Property Mapping</strong> and <strong className="font-semibold">+ Vendor Mapping</strong> buttons on the highlighted rows below.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleGoToLoaderTab}
+                        className="px-3 py-1.5 bg-amber-200 hover:bg-amber-300 text-amber-950 border border-amber-400 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                        title="All highlighted counterparties must be mapped before proceeding to the next screen"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-amber-800" />
+                        <span>Next Screen Locked</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between pb-1">
+                    <span className="text-xs text-gray-500 font-medium">
+                      <strong className="text-gray-800">{(batch.invoices || []).length}</strong> invoices in batch
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGoToLoaderTab}
+                      className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+                      title="Proceed to Loader File Preview & Inline Edit"
+                    >
+                      <span>Proceed to Next Screen: Loader File Preview</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
                 {/* COMPILED INVOICES TABLE */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse font-sans text-xs">
                       <thead>
-                        <tr className="bg-gray-50/50 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px]">
+                        <tr className="bg-gray-50/80 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200 select-none">
                           {/* INVOICE # & ID */}
                           <th 
                             onClick={() => handleHeaderSort('invoiceNumber')}
-                            className="py-2.5 px-3 min-w-[150px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 w-[160px] min-w-[160px] cursor-pointer hover:text-gray-900 select-none transition-colors sticky left-0 z-20 bg-gray-50/95 backdrop-blur-xs border-r border-gray-200/50"
                             title="Click to sort by Invoice Number"
                           >
                             <div className="flex items-center gap-1.5">
                               <span>Invoice # / ID</span>
                               {sortField === 'invoiceNumber' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                                <ArrowUp className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
@@ -664,15 +844,15 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                           {/* CUSTOMER / VENDOR */}
                           <th 
                             onClick={() => handleHeaderSort('entityName')}
-                            className="py-2.5 px-3 min-w-[220px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 min-w-[220px] cursor-pointer hover:text-gray-900 select-none transition-colors sticky left-[160px] z-20 bg-gray-50/95 backdrop-blur-xs border-r border-gray-200/80 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.07)]"
                             title="Click to sort by Vendor / Entity"
                           >
                             <div className="flex items-center gap-1.5">
                               <span>Vendor / Entity</span>
                               {sortField === 'entityName' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                                <ArrowUp className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
@@ -680,15 +860,15 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                           {/* PO & JOB NUMBER */}
                           <th 
                             onClick={() => handleHeaderSort('poNumber')}
-                            className="py-2.5 px-3 min-w-[140px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 min-w-[140px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                             title="Click to sort by PO Number"
                           >
                             <div className="flex items-center gap-1.5">
                               <span>PO & Job #</span>
                               {sortField === 'poNumber' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                                <ArrowUp className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
@@ -696,16 +876,16 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                           {/* INVOICE DATE */}
                           <th 
                             onClick={() => handleHeaderSort('date')}
-                            className="py-2.5 px-3 min-w-[120px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors bg-orange-50/40"
+                            className="py-3 px-3.5 min-w-[120px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                             title="Click to sort by Invoice Date"
                           >
-                            <div className="flex items-center gap-1.5 text-orange-950 font-extrabold">
-                              <Calendar className="w-3 h-3 text-[#EA580C]" />
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3 h-3 text-gray-400" />
                               <span>Dates</span>
                               {sortField === 'date' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                                <ArrowUp className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-orange-400 hover:text-[#EA580C]" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
@@ -713,15 +893,15 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                           {/* CURRENCY */}
                           <th 
                             onClick={() => handleHeaderSort('currency')}
-                            className="py-2.5 px-3 min-w-[80px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 min-w-[80px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                             title="Click to sort by Currency"
                           >
                             <div className="flex items-center gap-1.5">
                               <span>Currency</span>
                               {sortField === 'currency' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                                <ArrowUp className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
@@ -729,15 +909,15 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                           {/* AMOUNT */}
                           <th 
                             onClick={() => handleHeaderSort('amount')}
-                            className="py-2.5 px-3 text-right min-w-[120px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 text-right min-w-[120px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                             title="Click to sort by Gross Amount"
                           >
                             <div className="flex items-center justify-end gap-1.5">
                               <span>Gross Amount</span>
                               {sortField === 'amount' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                                <ArrowUp className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
@@ -745,21 +925,23 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                           {/* SETTLEMENT USD */}
                           <th 
                             onClick={() => handleHeaderSort('convertedAmount')}
-                            className="py-2.5 px-3 text-right min-w-[130px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 text-right min-w-[130px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                             title="Click to sort by USD Equivalent"
                           >
                             <div className="flex items-center justify-end gap-1.5">
                               <span>USD Equiv</span>
                               {sortField === 'convertedAmount' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                                <ArrowUp className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
 
                           {/* ACTIONS */}
-                          <th className="py-2.5 px-3 text-center w-24"></th>
+                          <th className="py-3 px-3.5 text-center w-28 min-w-[112px] sticky right-0 z-20 bg-gray-50/95 backdrop-blur-xs border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)]">
+                            Actions
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -782,26 +964,66 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                             const hasMultipleSplits = entitySplits.length > 1;
                             const richLinesCount = inv.richLineItems?.length || 0;
 
+                            // Check mapping status
+                            const vMap = findVendorMapping(inv.entityName, vendorMappings);
+                            const eMap = findEntityMapping(inv.entity || inv.entityName, entityMappings);
+                            const isVndMapped = !!(vMap && vMap.yardiVendorCode && vMap.status === 'Mapped');
+                            const isEntMapped = !!(eMap && eMap.yardiEntityCode && eMap.status === 'Mapped');
+                            const unmappedSplits = entitySplits.filter(sp => {
+                              const m = findEntityMapping(sp.entityName, entityMappings);
+                              return !m || !m.yardiEntityCode || m.status !== 'Mapped';
+                            });
+                            const isPropMapped = hasMultipleSplits ? unmappedSplits.length === 0 : isEntMapped;
+                            const isRowFullyMapped = isVndMapped && isPropMapped;
+                            const rowBgClass = !isRowFullyMapped
+                              ? 'bg-amber-50 group-hover:bg-amber-100/90'
+                              : isExpanded
+                              ? 'bg-[#FFF8F3]'
+                              : 'bg-white group-hover:bg-gray-50/90';
+
                             return (
                               <React.Fragment key={rowKey}>
                                 <tr
                                   onClick={(e) => toggleRowExpand(rowKey, e)}
-                                  className={`cursor-pointer transition-colors ${
-                                    isExpanded
+                                  className={`cursor-pointer transition-colors group ${
+                                    !isRowFullyMapped
+                                      ? 'bg-amber-50 hover:bg-amber-100/90 font-medium border-b-2 border-amber-300/80 shadow-xs'
+                                      : isExpanded
                                       ? 'bg-[#FFF8F3] border-l-4 border-l-[#EA580C]'
-                                      : 'hover:bg-gray-50'
+                                      : 'hover:bg-gray-50 border-l-4 border-l-transparent'
                                   }`}
                                   title="Click row to expand/collapse multi-entity breakdown"
                                 >
                                   {/* INVOICE NUMBER & ID */}
-                                  <td className="py-2.5 px-3 font-mono font-bold text-gray-900 whitespace-nowrap text-xs">
-                                    <div className="flex items-center gap-1.5">
+                                  <td 
+                                    className={`py-2.5 px-3 font-mono font-bold whitespace-nowrap text-xs transition-colors sticky left-0 z-10 w-[160px] min-w-[160px] ${rowBgClass} border-r border-gray-200/50 ${
+                                      !isRowFullyMapped 
+                                        ? 'border-l-4 border-l-amber-500 text-amber-950' 
+                                        : 'border-l-4 border-l-transparent text-gray-900'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5 flex-wrap">
                                       {inv.invoiceIdDisplay && (
                                         <span className="bg-gray-100 text-gray-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-200">
                                           {inv.invoiceIdDisplay}
                                         </span>
                                       )}
                                       <span>{inv.invoiceNumber}</span>
+                                      {!isRowFullyMapped && (
+                                        <span 
+                                          className="px-2 py-0.5 bg-amber-200 text-amber-950 border border-amber-400 rounded text-[9.5px] font-extrabold inline-flex items-center gap-1 shadow-2xs"
+                                          title={
+                                            !isVndMapped && !isPropMapped
+                                              ? "Unmapped: Property and Vendor mapping required"
+                                              : !isVndMapped
+                                              ? "Unmapped: Vendor mapping required"
+                                              : "Unmapped: Property mapping required"
+                                          }
+                                        >
+                                          <AlertTriangle className="w-2.5 h-2.5 text-amber-800 shrink-0" />
+                                          <span>Not Mapped</span>
+                                        </span>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={(e) => handleCopyRef(inv.invoiceNumber, e)}
@@ -820,9 +1042,13 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                                     </span>
                                   </td>
 
-                                  {/* CUSTOMER / VENDOR */}
-                                  <td className="py-2.5 px-3 text-xs">
-                                    <div className="flex items-center gap-1.5">
+                                  {/* CUSTOMER / VENDOR & MAPPING CONTROLS */}
+                                  <td className={`py-2.5 px-3 text-xs transition-colors sticky left-[160px] z-10 min-w-[220px] border-r border-gray-200/80 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.07)] ${
+                                    !isRowFullyMapped 
+                                      ? 'bg-amber-100/90 text-amber-950 font-semibold border-x border-amber-300/80' 
+                                      : rowBgClass
+                                  }`}>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded border shrink-0 ${
                                         inv.type === 'AP' 
                                           ? 'bg-amber-50 text-amber-800 border-amber-200' 
@@ -830,22 +1056,81 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                                       }`}>
                                         {inv.type}
                                       </span>
-                                      <span className="font-bold text-gray-900 truncate max-w-[180px]">
+                                      <span className="font-bold text-gray-900 truncate max-w-[160px]">
                                         {inv.entityName}
                                       </span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                      {hasMultipleSplits ? (
-                                        <span className="bg-purple-50 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
-                                          <Building2 className="w-2.5 h-2.5 text-purple-600" />
-                                          <span>Split ({entitySplits.length} Properties)</span>
+
+                                      {/* VENDOR MAPPING */}
+                                      {isVndMapped ? (
+                                        <span className="font-mono text-gray-700 font-bold text-[11px]" title={`Mapped Yardi Vendor Code: ${vMap?.yardiVendorCode}`}>
+                                          {vMap?.yardiVendorCode}
                                         </span>
                                       ) : (
-                                        inv.entity && (
-                                          <span className="text-[10px] text-gray-500 block truncate max-w-[180px]" title={inv.entity}>
-                                            {inv.entity}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenQuickMap('vendor', inv.entityName);
+                                          }}
+                                          className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all shadow-xs ring-1 ring-amber-400/80 group"
+                                          title="Click to configure Vendor Mapping"
+                                        >
+                                          <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                          <span>+ Vendor Mapping</span>
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* PROPERTY / ENTITY MAPPING ROW */}
+                                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                      {hasMultipleSplits ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="bg-purple-50 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
+                                            <Building2 className="w-2.5 h-2.5 text-purple-600" />
+                                            <span>Split ({entitySplits.length} Properties)</span>
                                           </span>
-                                        )
+                                          {unmappedSplits.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleRowExpand(rowKey, e);
+                                              }}
+                                              className="px-2 py-0.5 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all shadow-xs ring-1 ring-amber-400/80"
+                                              title="Click row to expand and map unmapped split properties"
+                                            >
+                                              <Plus className="w-2.5 h-2.5 text-amber-800" />
+                                              <span>{unmappedSplits.length} Unmapped Properties</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1.5">
+                                          {inv.entity && (
+                                            <span className="text-[10px] text-gray-600 font-medium truncate max-w-[130px]" title={inv.entity}>
+                                              {inv.entity}
+                                            </span>
+                                          )}
+                                          {/* PROPERTY MAPPING */}
+                                          {isEntMapped ? (
+                                            <span className="font-mono text-gray-700 font-bold text-[11px]">
+                                              {eMap?.yardiEntityCode}
+                                            </span>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenQuickMap('entity', inv.entity || inv.entityName);
+                                              }}
+                                              className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all shadow-xs ring-1 ring-amber-400/80 group"
+                                              title="Click to configure Property Mapping"
+                                            >
+                                              <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                              <span>+ Property Mapping</span>
+                                            </button>
+                                          )}
+                                        </div>
                                       )}
                                       {richLinesCount > 0 && (
                                         <span className="bg-blue-50 text-blue-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-blue-200">
@@ -916,7 +1201,7 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                                   </td>
 
                                   {/* ACTION ICONS */}
-                                  <td className="py-2.5 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                  <td className={`py-2.5 px-3 text-center whitespace-nowrap sticky right-0 z-10 w-28 min-w-[112px] border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)] ${rowBgClass}`} onClick={(e) => e.stopPropagation()}>
                                     <div className="flex items-center justify-center gap-1">
                                       <button
                                         type="button"
@@ -926,6 +1211,40 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                                       >
                                         <Eye className="w-3.5 h-3.5" />
                                       </button>
+
+                                      {!isRowFullyMapped && (
+                                        <div className="flex items-center gap-1">
+                                          {!isPropMapped && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const targetProp = hasMultipleSplits && unmappedSplits.length > 0 ? unmappedSplits[0].entityName : (inv.entity || inv.entityName);
+                                                handleOpenQuickMap('entity', targetProp);
+                                              }}
+                                              className="px-2 py-1 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-950 border border-amber-300 rounded font-mono text-[9.5px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs cursor-pointer group"
+                                              title="Click to configure Property Mapping"
+                                            >
+                                              <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                              <span>Property</span>
+                                            </button>
+                                          )}
+                                          {!isVndMapped && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenQuickMap('vendor', inv.entityName);
+                                              }}
+                                              className="px-2 py-1 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-950 border border-amber-300 rounded font-mono text-[9.5px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs cursor-pointer group"
+                                              title="Click to configure Vendor Mapping"
+                                            >
+                                              <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                              <span>Vendor</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
 
                                       {onRemoveInvoice && (
                                         <button
@@ -1068,25 +1387,43 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                                               <tbody className="divide-y divide-purple-100">
                                                 {entitySplits.map((sp, idx) => {
                                                   const mappedProperty = findEntityMapping(sp.entityName, entityMappings);
+                                                  const isSplitMapped = !!(mappedProperty?.yardiEntityCode && mappedProperty.status === 'Mapped');
                                                   return (
-                                                    <tr key={idx} className="hover:bg-purple-50/50">
-                                                      <td className="py-2 px-3 font-medium text-gray-900">
+                                                    <tr 
+                                                      key={idx} 
+                                                      className={
+                                                        !isSplitMapped 
+                                                          ? "bg-amber-100/90 hover:bg-amber-200/80 border-l-4 border-l-amber-500 border-b border-amber-200 font-medium transition-colors shadow-2xs" 
+                                                          : "hover:bg-purple-50/50 border-l-4 border-l-transparent transition-colors"
+                                                      }
+                                                    >
+                                                      <td className={`py-2 px-3 font-medium ${!isSplitMapped ? 'text-amber-950' : 'text-gray-900'}`}>
                                                         <div className="flex items-center gap-1.5">
                                                           <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-[10px] font-bold shrink-0">
                                                             {idx + 1}
                                                           </span>
-                                                          <span className="font-bold text-gray-900">{sp.entityName}</span>
+                                                          <span className="font-bold">{sp.entityName}</span>
                                                         </div>
                                                       </td>
-                                                      <td className="py-2 px-2.5 text-gray-600 text-[11px] font-mono">
+                                                      <td className={`py-2 px-2.5 font-mono text-[11px] transition-colors ${
+                                                        !isSplitMapped 
+                                                          ? 'bg-amber-200/70 text-amber-950 font-bold border-x border-amber-300/90' 
+                                                          : 'text-gray-600'
+                                                      }`}>
                                                         {mappedProperty?.yardiEntityCode ? (
-                                                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 rounded font-bold text-[10px] border border-emerald-200">
+                                                          <span className="font-mono text-gray-800 font-bold text-[11px]">
                                                             {mappedProperty.yardiEntityCode}
                                                           </span>
                                                         ) : (
-                                                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded font-bold text-[10px] border border-amber-200">
-                                                            Unmapped
-                                                          </span>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => handleOpenQuickMap('entity', sp.entityName)}
+                                                            className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all shadow-xs ring-1 ring-amber-400/80 group"
+                                                            title="Click to configure Property Mapping"
+                                                          >
+                                                            <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                                            <span>+ Property Mapping</span>
+                                                          </button>
                                                         )}
                                                       </td>
                                                       <td className="py-2 px-2.5 text-right font-mono font-bold text-purple-900">
@@ -1203,36 +1540,54 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                 activeTab === 'invoices' ? (
                   <button
                     type="button"
-                    onClick={() => setActiveTab('loader')}
-                    className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    onClick={handleGoToLoaderTab}
+                    className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 shadow-xs ${
+                      hasUnmapped
+                        ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300'
+                        : 'bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white'
+                    }`}
+                    title={
+                      hasUnmapped
+                        ? 'Complete all required property and vendor mappings on this batch screen before proceeding'
+                        : 'Proceed to Loader File Preview & Inline Edit'
+                    }
                   >
-                    <span>Preview Loader File</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    {hasUnmapped ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5 text-amber-800 shrink-0" />
+                        <span>Required Mapping Pending ({(batchValidation.missingVendors?.length || 0) + (batchValidation.missingEntities?.length || 0)}) — Map to Proceed</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Proceed to Next Screen: Loader File Preview</span>
+                        <ArrowRight className="w-4 h-4 shrink-0" />
+                      </>
+                    )}
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('invoices')}
-                    className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>Back to Invoices</span>
-                  </button>
-                )
-              )}
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('invoices')}
+                      className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Invoices</span>
+                    </button>
 
-              {batch.status !== 'Exported' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onExportToErp) onExportToErp(batch);
-                    onClose();
-                  }}
-                  className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>Post & Sync to ERP</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onExportToErp) onExportToErp(batch);
+                        onClose();
+                      }}
+                      className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Post & Sync to ERP</span>
+                    </button>
+                  </>
+                )
               )}
             </div>
           </div>
@@ -1245,6 +1600,131 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
           invoice={inspectingInvoice}
           onClose={() => setInspectingInvoice(null)}
         />
+      )}
+
+      {/* QUICK MAP VENDOR / ENTITY DIALOG MODAL */}
+      {quickMapTarget && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                {quickMapTarget.type === 'vendor' ? (
+                  <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
+                    <Users2 className="w-5 h-5" />
+                  </div>
+                ) : (
+                  <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    {quickMapTarget.type === 'vendor' ? 'Map Vendor to Yardi PayScan' : 'Map Property / Entity to Yardi'}
+                  </h3>
+                  <p className="text-xs text-gray-500">Assign GL account & code mapping for export</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickMapTarget(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
+                  {quickMapTarget.type === 'vendor' ? 'Source Vendor Name' : 'Source Property / Entity Name'}
+                </label>
+                <div className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg font-bold text-gray-900 flex items-center justify-between">
+                  <span className="truncate">{quickMapTarget.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-900 font-mono rounded font-semibold">
+                    Unmapped
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-gray-700">
+                    {quickMapTarget.type === 'vendor' ? 'Target Yardi Vendor Code *' : 'Target Yardi Property Code *'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const auto = quickMapTarget.type === 'vendor'
+                        ? generateAutoYardiVendorCode(quickMapTarget.name)
+                        : generateAutoYardiEntityCode(quickMapTarget.name);
+                      setQuickMapYardiCode(auto);
+                    }}
+                    className="text-[11px] text-[#EA580C] hover:text-[#D94E07] font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Auto-Suggest</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={quickMapYardiCode}
+                  onChange={(e) => setQuickMapYardiCode(e.target.value.toUpperCase())}
+                  placeholder={quickMapTarget.type === 'vendor' ? 'e.g. AWS_PAYSCAN' : 'e.g. PROP_101CAL'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono font-bold text-gray-900 focus:ring-2 focus:ring-[#EA580C] focus:border-transparent outline-none uppercase"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
+                  {quickMapTarget.type === 'vendor' ? 'Default GL Expense Account' : 'Fund / Entity Code'}
+                </label>
+                <select
+                  value={quickMapGlOrFund}
+                  onChange={(e) => setQuickMapGlOrFund(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-[#EA580C] focus:border-transparent outline-none bg-white"
+                >
+                  {quickMapTarget.type === 'vendor' ? (
+                    <>
+                      <option value="GL-6000 OPEX">GL-6000 OPEX (General Operating Expense)</option>
+                      <option value="GL-6100 IT">GL-6100 IT (Software & Cloud Infrastructure)</option>
+                      <option value="GL-6200 FACILITIES">GL-6200 FACILITIES (Building Maintenance & Utilities)</option>
+                      <option value="GL-6300 LEGAL">GL-6300 LEGAL (Professional & Advisory Services)</option>
+                      <option value="GL-6400 MARKETING">GL-6400 MARKETING (Advertising & Promotions)</option>
+                      <option value="GL-1500 CAPEX">GL-1500 CAPEX (Capital Expenditures & Equipment)</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="FUND-01">FUND-01 (Primary Real Estate Fund)</option>
+                      <option value="FUND-02">FUND-02 (Joint Venture Holdings)</option>
+                      <option value="FUND-03">FUND-03 (Commercial Core Portfolio)</option>
+                      <option value="HOLDCO-US">HOLDCO-US (Domestic Operating HoldCo)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setQuickMapTarget(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!quickMapYardiCode.trim()}
+                onClick={handleApplyQuickMap}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-[#EA580C] hover:bg-[#D94E07] disabled:bg-gray-300 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Save Mapping</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* YARDI VENDOR & ENTITY MAPPINGS MANAGER MODAL */}

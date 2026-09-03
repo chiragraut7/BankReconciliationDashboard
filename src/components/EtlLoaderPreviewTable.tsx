@@ -327,7 +327,14 @@ export const EtlLoaderPreviewTable: React.FC<EtlLoaderPreviewTableProps> = ({
                     ];
 
                     return (
-                      <tr key={r.id} className={r.hasMappingError ? 'bg-amber-50/60' : 'hover:bg-gray-50'}>
+                      <tr 
+                        key={r.id} 
+                        className={
+                          r.hasMappingError 
+                            ? 'bg-amber-50/90 hover:bg-amber-100/80 border-l-4 border-l-amber-500 font-medium' 
+                            : 'hover:bg-gray-50 border-l-4 border-l-transparent'
+                        }
+                      >
                         <td className="py-2 px-3 text-center text-[10px] text-gray-400 bg-gray-50 border-r border-gray-200">
                           {idx + 1}
                         </td>

@@ -121,6 +121,14 @@ export interface MatchedInvoice {
   description?: string;
   
   // Rich invoice metadata from invoice inspection
+  clientReference?: string;
+  sourceEntityName?: string;
+  payingBankName?: string;
+  vendorName?: string;
+  beneficiaryName?: string;
+  beneficiaryBankBic?: string;
+  beneficiaryBankName?: string;
+  allocation?: string;
   jobNumber?: string; // e.g. 'JOB-2026-9921'
   expensesType?: string; // e.g. 'EXP'
   category?: string; // e.g. 'IT & SaaS Services'
@@ -242,6 +250,14 @@ export interface InvoiceBatchItem {
   id: string;
   invoiceNumber: string;
   invoiceIdDisplay?: string;
+  clientReference?: string;
+  sourceEntityName?: string;
+  payingBankName?: string;
+  vendorName?: string;
+  beneficiaryName?: string;
+  beneficiaryBankBic?: string;
+  beneficiaryBankName?: string;
+  allocation?: string;
   date: string;
   dueDate: string;
   entityName: string;

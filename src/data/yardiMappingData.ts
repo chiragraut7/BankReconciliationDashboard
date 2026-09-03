@@ -194,21 +194,21 @@ export const INITIAL_YARDI_ENTITY_MAPPINGS: YardiEntityMapping[] = [
     id: 'EMAP-002',
     ourEntityCode: 'ENT-STONEGATE-05',
     ourEntityName: 'Novus Lux Stonegate 05 SCSp',
-    yardiEntityCode: 'prop_stn05',
-    yardiEntityName: 'Novus Stonegate 05 Lux Property / SPV',
+    yardiEntityCode: '', // Demo unmapped property for testing mapping guard
+    yardiEntityName: '',
     fundCode: 'FUND-NOVUS-05',
     legalJurisdiction: 'Luxembourg (CSSF Regulated)',
-    status: 'Mapped'
+    status: 'Unmapped'
   },
   {
     id: 'EMAP-003',
     ourEntityCode: 'ENT-FAIRHAVEN-06',
     ourEntityName: 'Novus Lux Fairhaven Intermediate 06 SCSp',
-    yardiEntityCode: 'prop_fair06',
-    yardiEntityName: 'Novus Fairhaven Inter 06 SPV',
+    yardiEntityCode: '', // Unmapped property for testing mapping guard
+    yardiEntityName: '',
     fundCode: 'FUND-NOVUS-06',
     legalJurisdiction: 'Luxembourg (CSSF Regulated)',
-    status: 'Mapped'
+    status: 'Unmapped'
   },
   {
     id: 'EMAP-004',
@@ -324,11 +324,11 @@ export const INITIAL_YARDI_ENTITY_MAPPINGS: YardiEntityMapping[] = [
     id: 'EMAP-015',
     ourEntityCode: 'ENT-APOLLO-HYBRID',
     ourEntityName: 'Apollo Hybrid Value Lux',
-    yardiEntityCode: 'prop_apo_hyb02',
-    yardiEntityName: 'Apollo Hybrid Value Lux Holdco S.a.r.l',
+    yardiEntityCode: '', // Demo unmapped property for testing mapping guard
+    yardiEntityName: '',
     fundCode: 'FUND-APO-HV',
     legalJurisdiction: 'Luxembourg',
-    status: 'Mapped'
+    status: 'Unmapped'
   },
   {
     id: 'EMAP-016',

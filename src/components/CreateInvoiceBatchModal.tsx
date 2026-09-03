@@ -37,7 +37,8 @@ import {
   Users2, 
   Table, 
   Code,
-  Plus
+  Plus,
+  Lock
 } from 'lucide-react';
 import { ReconciliationRun, InvoiceBatch, InvoiceETLFormat, InvoiceBatchItem, BankTransaction, MatchedInvoice } from '../types/reconciliation';
 import { INITIAL_INVOICES } from '../data/mockData';
@@ -67,6 +68,38 @@ import {
 } from '../utils/yardiEtlEngine';
 import { MappingManagerModal } from './MappingManagerModal';
 import { EtlLoaderPreviewTable } from './EtlLoaderPreviewTable';
+import { getInvoiceTableDetails, InvoiceTableDisplayData } from '../utils/invoiceTableData';
+
+// Helper to evaluate if an invoice has all counterparties and split properties mapped to Yardi
+export const isInvoiceRecordFullyMapped = (
+  inv: InvoiceBatchItem | MatchedInvoice,
+  vendorMappings: YardiVendorMapping[],
+  entityMappings: YardiEntityMapping[]
+): boolean => {
+  const details = getInvoiceTableDetails(inv);
+  const entitySplits = computeEntitySplits(inv);
+  const hasMultipleSplits = entitySplits.length > 1;
+
+  const vMap = findVendorMapping(details.vendorName, vendorMappings);
+  const eMap = findEntityMapping(details.payingEntityName, entityMappings);
+  const srcEntMap = findEntityMapping(details.sourceEntityName, entityMappings);
+  const srcVndMap = findVendorMapping(details.sourceEntityName, vendorMappings);
+
+  const isVndMapped = !!(vMap && vMap.yardiVendorCode && vMap.status === 'Mapped');
+  const isEntMapped = !!(eMap && eMap.yardiEntityCode && eMap.status === 'Mapped');
+  const isSrcMapped = !!(
+    (srcEntMap && srcEntMap.yardiEntityCode && srcEntMap.status === 'Mapped') ||
+    (srcVndMap && srcVndMap.yardiVendorCode && srcVndMap.status === 'Mapped')
+  );
+
+  const unmappedSplits = entitySplits.filter(sp => {
+    const m = findEntityMapping(sp.entityName, entityMappings);
+    return !m || !m.yardiEntityCode || m.status !== 'Mapped';
+  });
+
+  const isPropMapped = (hasMultipleSplits ? unmappedSplits.length === 0 : isEntMapped) && isSrcMapped;
+  return isVndMapped && isPropMapped;
+};
 
 interface CreateInvoiceBatchModalProps {
   isOpen: boolean;
@@ -122,14 +155,32 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'All' | 'AR' | 'AP'>('All');
   const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState<string>('All');
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<'All' | 'Removed' | 'Fresh'>('Fresh');
+  const [hideMappedInvoices, setHideMappedInvoices] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Date Range & Sorting State
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [datePreset, setDatePreset] = useState<'All' | 'Last7Days' | 'Last30Days' | 'Aug2026' | 'Sep2026' | 'Custom'>('All');
-  const [sortField, setSortField] = useState<'date' | 'dueDate' | 'amount' | 'convertedAmount' | 'currency' | 'invoiceNumber' | 'entityName' | 'poNumber' | 'removedFromBatchId'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  type InvoiceSortField = 
+    | 'invoiceNumber'
+    | 'clientReference'
+    | 'sourceEntityName'
+    | 'payingEntityName'
+    | 'payingBankName'
+    | 'amount'
+    | 'allocation'
+    | 'dueDate'
+    | 'currency'
+    | 'vendorName'
+    | 'beneficiaryName'
+    | 'beneficiaryBankBic'
+    | 'beneficiaryBankName'
+    | 'date'
+    | 'poNumber'
+    | 'removedFromBatchId';
+  const [sortField, setSortField] = useState<InvoiceSortField>('invoiceNumber');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
   // Expanded row details map
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -169,6 +220,14 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
             id: inv.id,
             invoiceNumber: inv.invoiceNumber,
             invoiceIdDisplay: inv.invoiceIdDisplay,
+            clientReference: inv.clientReference,
+            sourceEntityName: inv.sourceEntityName,
+            payingBankName: inv.payingBankName,
+            vendorName: inv.vendorName,
+            beneficiaryName: inv.beneficiaryName,
+            beneficiaryBankBic: inv.beneficiaryBankBic,
+            beneficiaryBankName: inv.beneficiaryBankName,
+            allocation: inv.allocation,
             date: inv.date,
             dueDate: inv.dueDate,
             entityName: inv.entityName,
@@ -223,6 +282,14 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
           id: inv.id,
           invoiceNumber: inv.invoiceNumber,
           invoiceIdDisplay: inv.invoiceIdDisplay,
+          clientReference: inv.clientReference,
+          sourceEntityName: inv.sourceEntityName,
+          payingBankName: inv.payingBankName,
+          vendorName: inv.vendorName,
+          beneficiaryName: inv.beneficiaryName,
+          beneficiaryBankBic: inv.beneficiaryBankBic,
+          beneficiaryBankName: inv.beneficiaryBankName,
+          allocation: inv.allocation,
           date: inv.date,
           dueDate: inv.dueDate,
           entityName: inv.entityName,
@@ -305,6 +372,19 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     return allReconciledInvoices.filter(inv => !inv.removedFromBatchId).length;
   }, [allReconciledInvoices]);
 
+  const { unmappedInvoicesCount, mappedInvoicesCount } = useMemo(() => {
+    let unmapped = 0;
+    let mapped = 0;
+    allReconciledInvoices.forEach(inv => {
+      if (isInvoiceRecordFullyMapped(inv, vendorMappings, entityMappings)) {
+        mapped++;
+      } else {
+        unmapped++;
+      }
+    });
+    return { unmappedInvoicesCount: unmapped, mappedInvoicesCount: mapped };
+  }, [allReconciledInvoices, vendorMappings, entityMappings]);
+
   // Date Preset handler
   const handleDatePresetChange = (preset: 'All' | 'Last7Days' | 'Last30Days' | 'Aug2026' | 'Sep2026' | 'Custom') => {
     setDatePreset(preset);
@@ -326,13 +406,13 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     }
   };
 
-  const handleHeaderSort = (field: typeof sortField) => {
+  const handleHeaderSort = (field: InvoiceSortField) => {
     if (sortField === field) {
       setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
       setSortOrder(
-        field === 'date' || field === 'dueDate' || field === 'amount' || field === 'convertedAmount' ? 'desc' : 'asc'
+        field === 'date' || field === 'dueDate' || field === 'amount' ? 'desc' : 'asc'
       );
     }
   };
@@ -369,45 +449,70 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
           }
         }
 
+        const details = getInvoiceTableDetails(inv);
+        const searchLower = searchTerm.toLowerCase();
         const matchesSearch = !searchTerm ||
-          inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (inv.invoiceIdDisplay && inv.invoiceIdDisplay.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.jobNumber && inv.jobNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.poNumber && inv.poNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.removedFromBatchId && inv.removedFromBatchId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.removalReason && inv.removalReason.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          inv.entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (inv.entity && inv.entity.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.payingEntity && inv.payingEntity.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.expensesType && inv.expensesType.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.paymentTerms && inv.paymentTerms.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (inv.description && inv.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          details.invoiceNumber.toLowerCase().includes(searchLower) ||
+          (inv.invoiceIdDisplay && inv.invoiceIdDisplay.toLowerCase().includes(searchLower)) ||
+          details.clientReference.toLowerCase().includes(searchLower) ||
+          details.sourceEntityName.toLowerCase().includes(searchLower) ||
+          details.payingEntityName.toLowerCase().includes(searchLower) ||
+          details.payingBankName.toLowerCase().includes(searchLower) ||
+          details.vendorName.toLowerCase().includes(searchLower) ||
+          details.beneficiaryName.toLowerCase().includes(searchLower) ||
+          details.beneficiaryBankBic.toLowerCase().includes(searchLower) ||
+          details.beneficiaryBankName.toLowerCase().includes(searchLower) ||
+          details.currency.toLowerCase().includes(searchLower) ||
+          details.dueDate.toLowerCase().includes(searchLower) ||
+          (inv.jobNumber && inv.jobNumber.toLowerCase().includes(searchLower)) ||
+          (inv.poNumber && inv.poNumber.toLowerCase().includes(searchLower)) ||
+          (inv.removedFromBatchId && inv.removedFromBatchId.toLowerCase().includes(searchLower)) ||
+          (inv.removalReason && inv.removalReason.toLowerCase().includes(searchLower)) ||
+          (inv.description && inv.description.toLowerCase().includes(searchLower)) ||
           inv.amount.toString().includes(searchTerm);
 
-        return matchesCategory && matchesType && matchesCurrency && matchesSource && matchesDateRange && matchesSearch;
+        const isFullyMapped = isInvoiceRecordFullyMapped(inv, vendorMappings, entityMappings);
+        const matchesMapping = !hideMappedInvoices || !isFullyMapped;
+
+        return matchesCategory && matchesType && matchesCurrency && matchesSource && matchesDateRange && matchesSearch && matchesMapping;
       })
       .sort((a, b) => {
         let comparison = 0;
-        if (sortField === 'date') {
+        const detA = getInvoiceTableDetails(a);
+        const detB = getInvoiceTableDetails(b);
+
+        if (sortField === 'invoiceNumber') {
+          comparison = detA.invoiceNumber.localeCompare(detB.invoiceNumber);
+        } else if (sortField === 'clientReference') {
+          comparison = detA.clientReference.localeCompare(detB.clientReference);
+        } else if (sortField === 'sourceEntityName') {
+          comparison = detA.sourceEntityName.localeCompare(detB.sourceEntityName);
+        } else if (sortField === 'payingEntityName') {
+          comparison = detA.payingEntityName.localeCompare(detB.payingEntityName);
+        } else if (sortField === 'payingBankName') {
+          comparison = detA.payingBankName.localeCompare(detB.payingBankName);
+        } else if (sortField === 'amount') {
+          comparison = detA.amount - detB.amount;
+        } else if (sortField === 'allocation') {
+          comparison = detA.allocationPercent - detB.allocationPercent;
+        } else if (sortField === 'dueDate') {
+          const dateA = parseInvoiceDate(a.dueDate)?.getTime() || parseInvoiceDate(a.date)?.getTime() || 0;
+          const dateB = parseInvoiceDate(b.dueDate)?.getTime() || parseInvoiceDate(b.date)?.getTime() || 0;
+          comparison = dateA - dateB;
+        } else if (sortField === 'currency') {
+          comparison = detA.currency.localeCompare(detB.currency);
+        } else if (sortField === 'vendorName') {
+          comparison = detA.vendorName.localeCompare(detB.vendorName);
+        } else if (sortField === 'beneficiaryName') {
+          comparison = detA.beneficiaryName.localeCompare(detB.beneficiaryName);
+        } else if (sortField === 'beneficiaryBankBic') {
+          comparison = detA.beneficiaryBankBic.localeCompare(detB.beneficiaryBankBic);
+        } else if (sortField === 'beneficiaryBankName') {
+          comparison = detA.beneficiaryBankName.localeCompare(detB.beneficiaryBankName);
+        } else if (sortField === 'date') {
           const dateA = parseInvoiceDate(a.date)?.getTime() || 0;
           const dateB = parseInvoiceDate(b.date)?.getTime() || 0;
           comparison = dateA - dateB;
-        } else if (sortField === 'dueDate') {
-          const dateA = parseInvoiceDate(a.dueDate)?.getTime() || 0;
-          const dateB = parseInvoiceDate(b.dueDate)?.getTime() || 0;
-          comparison = dateA - dateB;
-        } else if (sortField === 'amount') {
-          comparison = a.amount - b.amount;
-        } else if (sortField === 'convertedAmount') {
-          const amtA = a.convertedAmount ?? (a.currency === 'USD' ? a.amount : a.amount * (a.exchangeRate || 1));
-          const amtB = b.convertedAmount ?? (b.currency === 'USD' ? b.amount : b.amount * (b.exchangeRate || 1));
-          comparison = amtA - amtB;
-        } else if (sortField === 'currency') {
-          comparison = (a.currency || '').localeCompare(b.currency || '');
-        } else if (sortField === 'invoiceNumber') {
-          comparison = a.invoiceNumber.localeCompare(b.invoiceNumber);
-        } else if (sortField === 'entityName') {
-          comparison = a.entityName.localeCompare(b.entityName);
         } else if (sortField === 'poNumber') {
           comparison = (a.poNumber || '').localeCompare(b.poNumber || '');
         } else if (sortField === 'removedFromBatchId') {
@@ -415,7 +520,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
         }
         return sortOrder === 'asc' ? comparison : -comparison;
       });
-  }, [allReconciledInvoices, selectedCategoryFilter, selectedTypeFilter, selectedCurrencyFilter, selectedSourceFilter, startDate, endDate, searchTerm, sortField, sortOrder]);
+  }, [allReconciledInvoices, selectedCategoryFilter, selectedTypeFilter, selectedCurrencyFilter, selectedSourceFilter, startDate, endDate, searchTerm, sortField, sortOrder, hideMappedInvoices, vendorMappings, entityMappings]);
 
   // Selected invoice objects
   const selectedInvoices = useMemo(() => {
@@ -446,10 +551,11 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     };
   }, [selectedInvoices]);
 
-  // VALIDATION of Batch Mappings (Flag missing Vendor and Entity codes)
+  // VALIDATION of Batch Mappings (Flag missing Vendor and Entity codes for invoices in this table)
+  const tableInvoicesToValidate = selectedInvoices.length > 0 ? selectedInvoices : filteredInvoices;
   const batchValidation = useMemo(() => {
-    return validateBatchMappings(selectedInvoices, vendorMappings, entityMappings);
-  }, [selectedInvoices, vendorMappings, entityMappings]);
+    return validateBatchMappings(tableInvoicesToValidate, vendorMappings, entityMappings);
+  }, [tableInvoicesToValidate, vendorMappings, entityMappings]);
 
   // GENERATE GRANULAR ETL RECORDS (Explodes 4 entities x 4 lines into 16 distinct records with GL entries)
   const etlRecords = useMemo(() => {
@@ -550,6 +656,42 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     setTimeout(() => setMappingNotification(null), 4000);
   };
 
+  // Check whether any counterparty (vendor) or entity is unmapped for the selected batch items (or table items)
+  const hasUnmapped = selectedInvoices.length > 0
+    ? (!batchValidation.isValid || batchValidation.errorRecordsCount > 0 || (batchValidation.missingVendors?.length || 0) > 0 || (batchValidation.missingEntities?.length || 0) > 0)
+    : (filteredInvoices.length > 0 && (!batchValidation.isValid || batchValidation.errorRecordsCount > 0 || (batchValidation.missingVendors?.length || 0) > 0 || (batchValidation.missingEntities?.length || 0) > 0));
+
+  // Enforce rule: cannot go to Loader File Preview step until all vendors and entities are mapped
+  useEffect(() => {
+    if (hasUnmapped && activeTab === 'loader') {
+      setActiveTab('invoices');
+      setMappingNotification('⚠️ All vendors and entities in this table must be mapped before accessing Loader File Preview.');
+      setTimeout(() => setMappingNotification(null), 5000);
+    }
+  }, [hasUnmapped, activeTab]);
+
+  // Handler to safely navigate to Tab 2 (Loader File Preview & Inline Edit)
+  const handleGoToLoaderTab = () => {
+    if (selectedInvoices.length === 0) {
+      setMappingNotification('Please select at least one reconciled invoice before previewing the loader file.');
+      setTimeout(() => setMappingNotification(null), 4000);
+      return;
+    }
+
+    if (hasUnmapped) {
+      const missingVendorsCount = (batchValidation.missingVendors || []).length;
+      const missingEntitiesCount = (batchValidation.missingEntities || []).length;
+
+      setMappingNotification(
+        `⛔ Cannot proceed to next screen: All required mapping must happen in this batch screen first (${missingVendorsCount} vendor(s), ${missingEntitiesCount} entity/entities unmapped). Please map the highlighted rows below.`
+      );
+      setTimeout(() => setMappingNotification(null), 6000);
+      return;
+    }
+
+    setActiveTab('loader');
+  };
+
   // Open Quick Map Dialog for a specific unmapped Vendor or Entity
   const handleOpenQuickMap = (type: 'vendor' | 'entity', name: string, originalCode?: string) => {
     const defaultCode = type === 'vendor' 
@@ -599,7 +741,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
       }
       setVendorMappings(updated);
       saveStoredVendorMappings(updated);
-      setMappingNotification(`✓ Successfully mapped vendor "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}`);
+      setMappingNotification(`✓ Successfully mapped vendor "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}. Row unhighlighted.`);
     } else {
       const existingIdx = entityMappings.findIndex(
         e => e.ourEntityName.toLowerCase() === quickMapTarget.name.toLowerCase()
@@ -628,7 +770,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
       }
       setEntityMappings(updated);
       saveStoredEntityMappings(updated);
-      setMappingNotification(`✓ Successfully mapped property/entity "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}`);
+      setMappingNotification(`✓ Successfully mapped property/entity "${quickMapTarget.name}" → Yardi Code: ${trimmedCode}. Row unhighlighted.`);
     }
 
     setQuickMapTarget(null);
@@ -742,20 +884,13 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     }
 
     if (batchValidation.errorRecordsCount > 0 && statusToSave === 'Ready') {
-      const missingVendorsList = (batchValidation.missingVendors || []).join(', ') || 'None';
-      const missingEntitiesList = (batchValidation.missingEntities || []).join(', ') || 'None';
-      const confirmProceed = confirm(
-        `Warning: There are ${batchValidation.errorRecordsCount} record(s) with missing Yardi Vendor or Property Codes.\n\n` +
-        `• Missing Vendors: ${missingVendorsList}\n` +
-        `• Missing Entities: ${missingEntitiesList}\n\n` +
-        `Do you want to auto-map missing codes now and generate the batch? Click OK to Auto-Map & Create, or Cancel to review mappings.`
+      const missingVendorsCount = (batchValidation.missingVendors || []).length;
+      const missingEntitiesCount = (batchValidation.missingEntities || []).length;
+      setMappingNotification(
+        `⛔ Cannot proceed: All required mappings must happen on the batch screen first (${missingVendorsCount} vendor(s), ${missingEntitiesCount} entity/entities unmapped). Please use the Property Mapping and Vendor Mapping buttons on the highlighted rows.`
       );
-      if (confirmProceed) {
-        handleAutoMapBatchMissing();
-      } else {
-        setIsMappingModalOpen(true);
-        return;
-      }
+      setTimeout(() => setMappingNotification(null), 6000);
+      return;
     }
 
     const newBatch: InvoiceBatch = {
@@ -887,39 +1022,6 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
             </div>
           </div>
 
-          {/* MAPPING WARNING BANNER (IF UNMAPPED COUNTERPARTIES EXIST) */}
-          {batchValidation.errorRecordsCount > 0 && (
-            <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between shrink-0 animate-in slide-in-from-top-1">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                <div className="text-xs text-amber-900">
-                  <strong>Mapping Alert:</strong> {batchValidation.errorRecordsCount} selected item(s) reference unmapped counterparties or legal entities.
-                  {(batchValidation.missingVendors || []).length > 0 && (
-                    <span className="ml-1">Vendors: <code className="bg-amber-100 px-1 rounded">{(batchValidation.missingVendors || []).join(', ')}</code></span>
-                  )}
-                  {(batchValidation.missingEntities || []).length > 0 && (
-                    <span className="ml-1">• Entities: <code className="bg-amber-100 px-1 rounded">{(batchValidation.missingEntities || []).join(', ')}</code></span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={handleAutoMapBatchMissing}
-                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Auto-Map All Missing</span>
-                </button>
-                <button
-                  onClick={() => setIsMappingModalOpen(true)}
-                  className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-xs font-bold cursor-pointer transition-colors"
-                >
-                  Configure Manually &rarr;
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* WORKSPACE NAVIGATION TABS */}
           <div className="px-6 py-2.5 bg-white border-b border-gray-200 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
@@ -941,18 +1043,35 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
 
               <button
                 type="button"
-                onClick={() => setActiveTab('loader')}
+                onClick={handleGoToLoaderTab}
                 className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === 'loader'
+                  hasUnmapped
+                    ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
+                    : activeTab === 'loader'
                     ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
+                title={
+                  hasUnmapped
+                    ? 'All vendors and entities must be mapped before proceeding to Loader File Preview'
+                    : 'Switch to Loader File Preview & Inline Edit'
+                }
               >
-                <Layers className="w-4 h-4" />
+                {hasUnmapped ? (
+                  <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                ) : (
+                  <Layers className="w-4 h-4 shrink-0" />
+                )}
                 <span>2. Loader File Preview & Inline Edit</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EA580C] text-white">
-                  {etlRecords.length} GL Rows
-                </span>
+                {hasUnmapped ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                    Mapping Required
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EA580C] text-white">
+                    {etlRecords.length} GL Rows
+                  </span>
+                )}
               </button>
             </div>
 
@@ -974,7 +1093,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                 {/* PREVIOUS BATCH TOGGLE SWITCH & ACTIONS BAR */}
                 <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
                   {/* Left: Interactive Switch Toggle between Only New vs Previous Batch Invoices */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
                       <span className={`text-xs font-semibold ${selectedSourceFilter === 'Fresh' ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
                         Only New Invoices ({freshInvoicesCount})
@@ -1003,8 +1122,37 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                       </span>
                     </div>
 
+                    {/* Hide Mapped / Show Only Unmapped Switch */}
+                    <div className="flex items-center gap-2.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                      <span className={`text-xs font-semibold ${!hideMappedInvoices ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
+                        All Invoices
+                      </span>
+
+                      {/* Switch Toggle */}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hideMappedInvoices}
+                        onClick={() => setHideMappedInvoices(prev => !prev)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-[#EA580C] focus:ring-offset-1 ${
+                          hideMappedInvoices ? 'bg-[#EA580C]' : 'bg-gray-300'
+                        }`}
+                        title={hideMappedInvoices ? 'Currently hiding mapped rows. Click to show all invoices' : 'Click to hide mapped rows and remove them once mapped'}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                            hideMappedInvoices ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+
+                      <span className={`text-xs font-semibold ${hideMappedInvoices ? 'text-[#EA580C] font-bold' : 'text-gray-500'}`}>
+                        Hide Mapped ({mappedInvoicesCount})
+                      </span>
+                    </div>
+
                     <span className="text-[11px] text-gray-500">
-                      Showing <strong className="text-gray-800">{filteredInvoices.length}</strong> {selectedSourceFilter === 'Removed' ? 'previous batch' : 'new'} invoices
+                      Showing <strong className="text-gray-800">{filteredInvoices.length}</strong> {selectedSourceFilter === 'Removed' ? 'previous batch' : 'new'} {hideMappedInvoices ? 'unmapped ' : ''}invoices
                     </span>
                   </div>
 
@@ -1021,14 +1169,80 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                   </div>
                 </div>
 
+                {/* REQUIRED MAPPING STATUS & PROCEED BANNER */}
+                {selectedInvoices.length > 0 && (
+                  hasUnmapped ? (
+                    <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-amber-100 text-amber-800 rounded-lg shrink-0 border border-amber-300">
+                          <AlertTriangle className="w-5 h-5 text-amber-700" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-bold text-amber-950">
+                              Required Mapping Pending in Batch Screen
+                            </h4>
+                            <span className="px-2 py-0.5 bg-amber-200 text-amber-950 rounded-full text-[10px] font-extrabold border border-amber-400">
+                              {(batchValidation.missingVendors?.length || 0) + (batchValidation.missingEntities?.length || 0)} Counterparties Unmapped
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-amber-900 mt-0.5">
+                            Required property and vendor mappings must happen on this batch screen before proceeding to the next screen. Click the amber <strong className="font-semibold">+ Property Mapping</strong> and <strong className="font-semibold">+ Vendor Mapping</strong> buttons on the highlighted rows below.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setHideMappedInvoices(prev => !prev)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                            hideMappedInvoices
+                              ? 'bg-amber-700 text-white border-amber-800 shadow-xs'
+                              : 'bg-white hover:bg-amber-100 text-amber-950 border-amber-300 shadow-2xs'
+                          }`}
+                          title="Toggle hiding already-mapped rows so only unmapped rows are shown"
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                          <span>{hideMappedInvoices ? 'Showing Unmapped Only' : 'Focus: Hide Mapped'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleGoToLoaderTab}
+                          className="px-3 py-1.5 bg-amber-200 hover:bg-amber-300 text-amber-950 border border-amber-400 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                          title="All highlighted counterparties must be mapped before proceeding to the next screen"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-amber-800" />
+                          <span>Next Screen Locked</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between pb-1">
+                      <span className="text-xs text-gray-500 font-medium">
+                        <strong className="text-gray-800">{selectedInvoices.length}</strong> invoices selected for batch
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleGoToLoaderTab}
+                        className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+                        title="Proceed to Loader File Preview & Inline Edit"
+                      >
+                        <span>Proceed to Next Screen: Loader File Preview</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )
+                )}
+
                 {/* INVOICES SELECTION TABLE */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse font-sans text-xs">
                       <thead>
-                        <tr className="bg-gray-50/80 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px]">
+                        <tr className="bg-gray-50/80 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200 select-none">
                           {/* Checkbox column */}
-                          <th className="py-2.5 px-3 w-10 text-center">
+                          <th className="py-3 px-3 w-11 min-w-[44px] max-w-[44px] text-center sticky left-0 z-20 bg-gray-50/95 backdrop-blur-xs border-r border-gray-200/50">
                             <button
                               type="button"
                               onClick={handleToggleSelectAll}
@@ -1047,133 +1261,245 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                             </button>
                           </th>
 
-                          {/* INVOICE NUMBER & ID */}
+                          {/* 1. INVOICE NUMBER */}
                           <th 
                             onClick={() => handleHeaderSort('invoiceNumber')}
-                            className="py-2.5 px-3 min-w-[150px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 min-w-[170px] cursor-pointer hover:text-gray-900 select-none transition-colors sticky left-[44px] z-20 bg-gray-50/95 backdrop-blur-xs border-r border-gray-200/80 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.07)]"
                           >
                             <div className="flex items-center gap-1.5">
-                              <span>Invoice # / ID</span>
+                              <span>Invoice Number</span>
                               {sortField === 'invoiceNumber' ? (
                                 sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
 
-                          {/* ENTITY & VENDOR WITH YARDI MAPPING BADGE */}
+                          {/* 2. CLIENT REFERENCE */}
                           <th 
-                            onClick={() => handleHeaderSort('entityName')}
-                            className="py-2.5 px-3 min-w-[240px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            onClick={() => handleHeaderSort('clientReference')}
+                            className="py-3 px-3.5 min-w-[140px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                           >
                             <div className="flex items-center gap-1.5">
-                              <span>Vendor & Target Property (Yardi Codes)</span>
-                              {sortField === 'entityName' ? (
+                              <span>Client Reference</span>
+                              {sortField === 'clientReference' ? (
                                 sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
 
-                          {/* PO & JOB NUMBER */}
+                          {/* 3. SOURCE ENTITY NAME */}
                           <th 
-                            onClick={() => handleHeaderSort('poNumber')}
-                            className="py-2.5 px-3 min-w-[130px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            onClick={() => handleHeaderSort('sourceEntityName')}
+                            className="py-3 px-3.5 min-w-[200px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                           >
                             <div className="flex items-center gap-1.5">
-                              <span>PO & Job #</span>
-                              {sortField === 'poNumber' ? (
+                              <span>Source Entity Name</span>
+                              {sortField === 'sourceEntityName' ? (
                                 sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
 
-                          {/* INVOICE DATE */}
+                          {/* 4. PAYING ENTITY NAME */}
                           <th 
-                            onClick={() => handleHeaderSort('date')}
-                            className="py-2.5 px-3 min-w-[120px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors bg-orange-50/40"
+                            onClick={() => handleHeaderSort('payingEntityName')}
+                            className="py-3 px-3.5 min-w-[210px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                           >
-                            <div className="flex items-center gap-1.5 text-orange-950 font-extrabold">
-                              <Calendar className="w-3 h-3 text-[#EA580C]" />
-                              <span>Dates</span>
-                              {sortField === 'date' ? (
+                            <div className="flex items-center gap-1.5">
+                              <span>Paying Entity Name</span>
+                              {sortField === 'payingEntityName' ? (
                                 sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-orange-400 hover:text-[#EA580C]" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
 
-                          {/* CURRENCY COLUMN */}
+                          {/* 5. PAYING BANK NAME */}
+                          <th 
+                            onClick={() => handleHeaderSort('payingBankName')}
+                            className="py-3 px-3.5 min-w-[190px] cursor-pointer hover:text-gray-900 select-none transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Paying Bank Name</span>
+                              {sortField === 'payingBankName' ? (
+                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* 6. AMOUNT */}
+                          <th 
+                            onClick={() => handleHeaderSort('amount')}
+                            className="py-3 px-3.5 text-right min-w-[110px] cursor-pointer hover:text-gray-900 select-none transition-colors"
+                          >
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span>Amount</span>
+                              {sortField === 'amount' ? (
+                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* 7. ALLOCATION */}
+                          <th 
+                            onClick={() => handleHeaderSort('allocation')}
+                            className="py-3 px-3.5 min-w-[120px] cursor-pointer hover:text-gray-900 select-none transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Allocation</span>
+                              {sortField === 'allocation' ? (
+                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* 8. DUE DATE */}
+                          <th 
+                            onClick={() => handleHeaderSort('dueDate')}
+                            className="py-3 px-3.5 min-w-[110px] cursor-pointer hover:text-gray-900 select-none transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Due Date</span>
+                              {sortField === 'dueDate' ? (
+                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* 9. CURRENCY */}
                           <th 
                             onClick={() => handleHeaderSort('currency')}
-                            className="py-2.5 px-3 min-w-[80px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            className="py-3 px-3.5 min-w-[85px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                           >
                             <div className="flex items-center gap-1.5">
                               <span>Currency</span>
                               {sortField === 'currency' ? (
                                 sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
 
-                          {/* GROSS AMOUNT */}
+                          {/* 10. VENDOR NAME */}
                           <th 
-                            onClick={() => handleHeaderSort('amount')}
-                            className="py-2.5 px-3 text-right min-w-[120px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
-                          >
-                            <div className="flex items-center justify-end gap-1.5">
-                              <span>Gross Amount</span>
-                              {sortField === 'amount' ? (
-                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
-                              ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
-                              )}
-                            </div>
-                          </th>
-
-                          {/* BATCH SOURCE COLUMN */}
-                          <th 
-                            onClick={() => handleHeaderSort('removedFromBatchId')}
-                            className="py-2.5 px-3 min-w-[140px] cursor-pointer hover:bg-gray-100/80 select-none transition-colors"
+                            onClick={() => handleHeaderSort('vendorName')}
+                            className="py-3 px-3.5 min-w-[190px] cursor-pointer hover:text-gray-900 select-none transition-colors"
                           >
                             <div className="flex items-center gap-1.5">
-                              <span>Batch Source</span>
-                              {sortField === 'removedFromBatchId' ? (
+                              <span>Vendor Name</span>
+                              {sortField === 'vendorName' ? (
                                 sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
                               ) : (
-                                <ArrowUpDown className="w-3 h-3 text-gray-300 hover:text-gray-500" />
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
                               )}
                             </div>
                           </th>
 
-                          {/* STATUS & ACTIONS */}
-                          <th className="py-2.5 px-3 text-center min-w-[100px]">
-                            Actions & Details
+                          {/* 11. BENEFICIARY NAME */}
+                          <th 
+                            onClick={() => handleHeaderSort('beneficiaryName')}
+                            className="py-3 px-3.5 min-w-[190px] cursor-pointer hover:text-gray-900 select-none transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Beneficiary Name</span>
+                              {sortField === 'beneficiaryName' ? (
+                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* 12. BENEFICIARY BANK BIC CODE */}
+                          <th 
+                            onClick={() => handleHeaderSort('beneficiaryBankBic')}
+                            className="py-3 px-3.5 min-w-[160px] cursor-pointer hover:text-gray-900 select-none transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Beneficiary Bank BIC Code</span>
+                              {sortField === 'beneficiaryBankBic' ? (
+                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* 13. BENEFICIARY BANK NAME */}
+                          <th 
+                            onClick={() => handleHeaderSort('beneficiaryBankName')}
+                            className="py-3 px-3.5 min-w-[190px] cursor-pointer hover:text-gray-900 select-none transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>Beneficiary Bank Name</span>
+                              {sortField === 'beneficiaryBankName' ? (
+                                sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-[#EA580C]" /> : <ArrowDown className="w-3 h-3 text-[#EA580C]" />
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-gray-400" />
+                              )}
+                            </div>
+                          </th>
+
+                          {/* ACTIONS & DETAILS */}
+                          <th className="py-3 px-3.5 text-center min-w-[120px] sticky right-0 z-20 bg-gray-50/95 backdrop-blur-xs border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)]">
+                            Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200">
+                      <tbody className="divide-y divide-gray-100 text-xs">
                         {filteredInvoices.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="py-12 text-center text-gray-500">
-                              <Receipt className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                              <div className="font-semibold text-gray-700">
-                                {selectedSourceFilter === 'Removed'
-                                  ? 'No previous batch invoices found for re-batching'
-                                  : 'No new unbatched reconciled invoices found'}
-                              </div>
-                              <div className="text-xs text-gray-400 mt-1">
-                                {selectedSourceFilter === 'Removed'
-                                  ? 'Invoices removed from previous batches will appear here'
-                                  : 'Toggle the switch above to view previous batch invoices'}
-                              </div>
+                            <td colSpan={15} className="py-12 text-center text-gray-500">
+                              {hideMappedInvoices ? (
+                                <div className="max-w-md mx-auto">
+                                  <div className="w-10 h-10 mx-auto rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 shadow-xs">
+                                    <Check className="w-5 h-5" />
+                                  </div>
+                                  <div className="font-semibold text-gray-800 text-sm">
+                                    All Invoices in this view are fully mapped!
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    All {mappedInvoicesCount} invoices have verified Yardi property and vendor mappings. Mapped rows are currently hidden.
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setHideMappedInvoices(false)}
+                                    className="mt-3.5 px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors border border-gray-200"
+                                  >
+                                    <span>Show All Invoices ({mappedInvoicesCount})</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <Receipt className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                                  <div className="font-semibold text-gray-700">
+                                    {selectedSourceFilter === 'Removed'
+                                      ? 'No previous batch invoices found for re-batching'
+                                      : 'No new unbatched reconciled invoices found'}
+                                  </div>
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    {selectedSourceFilter === 'Removed'
+                                      ? 'Invoices removed from previous batches will appear here'
+                                      : 'Toggle the switch above to view previous batch invoices'}
+                                  </div>
+                                </>
+                              )}
                             </td>
                           </tr>
                         ) : (
@@ -1184,26 +1510,58 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                             const isCrossCurrency = inv.currency && inv.currency !== 'USD';
                             const entitySplits = computeEntitySplits(inv);
                             const hasMultipleSplits = entitySplits.length > 1;
-                            const richLinesCount = inv.richLineItems?.length || 0;
+
+                            // Resolve display details
+                            const details = getInvoiceTableDetails(inv);
 
                             // Look up mappings
-                            const vMap = findVendorMapping(inv.entityName, vendorMappings);
-                            const primaryEntityName = inv.payingEntity || inv.entity || (inv.apportionment && inv.apportionment[0]?.entity) || 'Novus Property SPV';
-                            const eMap = findEntityMapping(primaryEntityName, entityMappings);
+                            const vMap = findVendorMapping(details.vendorName, vendorMappings);
+                            const eMap = findEntityMapping(details.payingEntityName, entityMappings);
+                            const srcEntMap = findEntityMapping(details.sourceEntityName, entityMappings);
+                            const srcVndMap = findVendorMapping(details.sourceEntityName, vendorMappings);
 
                             const isVndMapped = !!(vMap && vMap.yardiVendorCode && vMap.status === 'Mapped');
                             const isEntMapped = !!(eMap && eMap.yardiEntityCode && eMap.status === 'Mapped');
+                            const isSrcMapped = !!((srcEntMap && srcEntMap.yardiEntityCode && srcEntMap.status === 'Mapped') || (srcVndMap && srcVndMap.yardiVendorCode && srcVndMap.status === 'Mapped'));
+
+                            // Check splits mapping status
+                            const unmappedSplits = entitySplits.filter(sp => {
+                              const m = findEntityMapping(sp.entityName, entityMappings);
+                              return !m || !m.yardiEntityCode || m.status !== 'Mapped';
+                            });
+                            const isPropMapped = (hasMultipleSplits ? unmappedSplits.length === 0 : isEntMapped) && isSrcMapped;
+                            const isRowFullyMapped = isInvoiceRecordFullyMapped(inv, vendorMappings, entityMappings);
+                            const rowBgClass = !isRowFullyMapped
+                              ? isSelected
+                                ? 'bg-amber-100 group-hover:bg-amber-200/90'
+                                : 'bg-amber-50 group-hover:bg-amber-100/90'
+                              : isSelected
+                              ? 'bg-slate-50/80 group-hover:bg-slate-100/70'
+                              : 'bg-white group-hover:bg-gray-50/90';
 
                             return (
                               <React.Fragment key={key}>
                                 <tr
                                   onClick={() => handleToggleInvoice(key)}
-                                  className={`hover:bg-orange-50/40 cursor-pointer transition-colors ${
-                                    isSelected ? 'bg-orange-50/25 font-medium' : ''
-                                  } ${!isVndMapped || !isEntMapped ? 'bg-amber-50/20' : ''}`}
+                                  className={`cursor-pointer transition-all duration-150 group ${
+                                    !isRowFullyMapped
+                                      ? isSelected
+                                        ? 'bg-amber-100 hover:bg-amber-200/90 font-medium border-b-2 border-amber-300 shadow-xs ring-1 ring-amber-400/40'
+                                        : 'bg-amber-50 hover:bg-amber-100/90 font-medium border-b-2 border-amber-300/80'
+                                      : isSelected
+                                      ? 'bg-slate-50/80 hover:bg-slate-100/70 font-normal border-b border-gray-200'
+                                      : 'hover:bg-gray-50/80 border-b border-gray-100'
+                                  }`}
                                 >
                                   {/* CHECKBOX */}
-                                  <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <td 
+                                    className={`py-3 px-3 w-11 min-w-[44px] max-w-[44px] text-center transition-colors sticky left-0 z-10 ${rowBgClass} border-r border-gray-200/50 ${
+                                      !isRowFullyMapped 
+                                        ? 'border-l-4 border-l-amber-500' 
+                                        : 'border-l-4 border-l-transparent'
+                                    }`} 
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     <button
                                       type="button"
                                       onClick={() => handleToggleInvoice(key)}
@@ -1217,157 +1575,291 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                     </button>
                                   </td>
 
-                                  {/* INVOICE NUMBER */}
-                                  <td className="py-2.5 px-3 font-mono text-xs whitespace-nowrap">
-                                    <div className="flex items-center gap-1.5 font-bold text-gray-900">
-                                      <span>{inv.invoiceNumber}</span>
+                                  {/* 1. INVOICE NUMBER */}
+                                  <td className={`py-3 px-3.5 font-mono text-xs whitespace-nowrap sticky left-[44px] z-10 ${rowBgClass} border-r border-gray-200/80 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.07)] min-w-[170px]`}>
+                                    <div className="flex items-center gap-1.5 font-bold text-gray-900 flex-wrap">
+                                      <span>{details.invoiceNumber}</span>
                                       {inv.invoiceIdDisplay && (
-                                        <span className="px-1.5 py-0.2 bg-gray-100 text-gray-600 rounded text-[9px]">
+                                        <span className="px-1.5 py-0.2 bg-gray-100 text-gray-600 rounded text-[9px] font-sans">
                                           {inv.invoiceIdDisplay}
                                         </span>
                                       )}
-                                    </div>
-                                    <div className="text-[10px] text-gray-500 font-sans mt-0.5">
-                                      {inv.expensesType || inv.category || 'OPEX'}
-                                    </div>
-                                  </td>
-
-                                  {/* VENDOR & ENTITY WITH YARDI MAPPING PILLS */}
-                                  <td className="py-2.5 px-3 text-xs">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded border shrink-0 ${
-                                        inv.type === 'AP' 
-                                          ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                      }`}>
-                                        {inv.type}
-                                      </span>
-                                      <span className="font-bold text-gray-900 truncate max-w-[190px]">
-                                        {inv.entityName}
-                                      </span>
-                                    </div>
-
-                                    {/* MAPPING BADGES */}
-                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                      {/* Vendor Code */}
-                                      {isVndMapped ? (
-                                        <span className="px-1.5 py-0.2 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1" title={`Yardi PayScan Vendor Code: ${vMap?.yardiVendorCode}`}>
-                                          <span>Yd: {vMap?.yardiVendorCode}</span>
-                                        </span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleOpenQuickMap('vendor', inv.entityName, inv.vendorCode);
-                                          }}
-                                          className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs hover:shadow-xs cursor-pointer group"
-                                          title="Vendor is not mapped to Yardi PayScan. Click to map this vendor."
+                                      {!isRowFullyMapped && (
+                                        <span 
+                                          className="px-2 py-0.5 bg-amber-200 text-amber-950 border border-amber-400 rounded text-[9.5px] font-extrabold inline-flex items-center gap-1 shadow-2xs"
+                                          title={
+                                            !isVndMapped && !isPropMapped
+                                              ? "Unmapped: Both Property and Vendor mapping required"
+                                              : !isVndMapped
+                                              ? "Unmapped: Vendor mapping required"
+                                              : "Unmapped: Property mapping required"
+                                          }
                                         >
-                                          <Plus className="w-2.5 h-2.5 text-amber-700 group-hover:scale-110 transition-transform" />
-                                          <span>Map Vendor</span>
-                                        </button>
-                                      )}
-
-                                      {/* Entity Code */}
-                                      {hasMultipleSplits ? (
-                                        <span className="bg-purple-50 text-purple-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-purple-200 inline-flex items-center gap-1">
-                                          <Building2 className="w-2.5 h-2.5 text-purple-600" />
-                                          <span>Split ({entitySplits.length} Properties)</span>
-                                        </span>
-                                      ) : isEntMapped ? (
-                                        <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1" title={`Yardi Property Code: ${eMap?.yardiEntityCode}`}>
-                                          <span>Prop: {eMap?.yardiEntityCode}</span>
-                                        </span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleOpenQuickMap('entity', primaryEntityName, inv.propertyCode);
-                                          }}
-                                          className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300 rounded font-mono text-[9px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs hover:shadow-xs cursor-pointer group"
-                                          title="Property/Entity is not mapped to Yardi Voyager. Click to map this entity."
-                                        >
-                                          <Plus className="w-2.5 h-2.5 text-amber-700 group-hover:scale-110 transition-transform" />
-                                          <span>Map Entity</span>
-                                        </button>
-                                      )}
-
-                                      {richLinesCount > 0 && (
-                                        <span className="px-1.5 py-0.2 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[9px] font-mono">
-                                          {richLinesCount} lines
+                                          <AlertTriangle className="w-2.5 h-2.5 text-amber-800 shrink-0" />
+                                          <span>Not Mapped</span>
                                         </span>
                                       )}
                                     </div>
                                   </td>
 
-                                  {/* PO & JOB NUMBER */}
-                                  <td className="py-2.5 px-3 font-mono text-xs whitespace-nowrap">
-                                    <div className="font-bold text-gray-900">
-                                      {inv.poNumber || 'PO-DIRECT'}
+                                  {/* 2. CLIENT REFERENCE */}
+                                  <td className="py-3 px-3.5 font-mono text-xs whitespace-nowrap text-gray-700 font-medium">
+                                    {details.clientReference}
+                                  </td>
+
+                                  {/* 3. SOURCE ENTITY NAME */}
+                                  <td className={`py-3 px-3.5 text-xs min-w-[200px] transition-colors ${
+                                    !isSrcMapped 
+                                      ? 'bg-amber-100/90 text-amber-950 font-semibold border-x border-amber-300/80 shadow-inner' 
+                                      : 'text-gray-800'
+                                  }`}>
+                                    <div className="font-semibold text-gray-900 line-clamp-1" title={details.sourceEntityName}>
+                                      {details.sourceEntityName}
                                     </div>
-                                    {inv.jobNumber && (
-                                      <span className="text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200 block w-fit mt-0.5">
-                                        {inv.jobNumber}
-                                      </span>
+                                    {isSrcMapped ? (
+                                      (srcEntMap?.yardiEntityCode || srcVndMap?.yardiVendorCode) ? (
+                                        <div className="mt-0.5">
+                                          <span 
+                                            className="font-mono text-gray-700 font-bold text-[11px]" 
+                                            title={`Mapped Yardi Code: ${srcEntMap?.yardiEntityCode || srcVndMap?.yardiVendorCode}`}
+                                          >
+                                            {srcEntMap?.yardiEntityCode || srcVndMap?.yardiVendorCode}
+                                          </span>
+                                        </div>
+                                      ) : null
+                                    ) : (
+                                      <div className="mt-1">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenQuickMap(srcVndMap && !srcEntMap ? 'vendor' : 'entity', details.sourceEntityName);
+                                          }}
+                                          className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 transition-all shadow-xs ring-1 ring-amber-400/80 cursor-pointer group"
+                                          title={`Source Entity "${details.sourceEntityName}" is not mapped to Yardi Voyager. Click to configure Property Mapping.`}
+                                        >
+                                          <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                          <span>{srcVndMap && !srcEntMap ? '+ Vendor Mapping' : '+ Property Mapping'}</span>
+                                        </button>
+                                      </div>
                                     )}
                                   </td>
 
-                                  {/* INVOICE DATE */}
-                                  <td className="py-2.5 px-3 font-mono text-gray-700 whitespace-nowrap text-xs">
-                                    <div>{inv.date}</div>
-                                    <div className="text-[10px] text-gray-400 font-sans">Due: {inv.dueDate}</div>
+                                  {/* 4. PAYING ENTITY NAME */}
+                                  <td className={`py-3 px-3.5 text-xs min-w-[210px] transition-colors ${
+                                    (hasMultipleSplits ? unmappedSplits.length > 0 : !isEntMapped)
+                                      ? 'bg-amber-100/90 text-amber-950 font-semibold border-x border-amber-300/80' 
+                                      : ''
+                                  }`}>
+                                    <div className="font-semibold text-gray-900 line-clamp-1" title={details.payingEntityName}>
+                                      {details.payingEntityName}
+                                    </div>
+                                    {hasMultipleSplits ? (
+                                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                        <span className="bg-purple-50 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-purple-200 inline-flex items-center gap-1">
+                                          <Building2 className="w-2.5 h-2.5 text-purple-600" />
+                                          <span>Split ({entitySplits.length})</span>
+                                        </span>
+                                        {unmappedSplits.length > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenQuickMap('entity', unmappedSplits[0].entityName);
+                                            }}
+                                            className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 transition-all shadow-xs ring-1 ring-amber-400/80 cursor-pointer group"
+                                            title={`Unmapped property "${unmappedSplits[0].entityName}". Click to configure Property Mapping.`}
+                                          >
+                                            <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                            <span>+ Property Mapping</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      isEntMapped ? (
+                                        eMap?.yardiEntityCode ? (
+                                          <div className="mt-0.5">
+                                            <span 
+                                              className="font-mono text-gray-700 font-bold text-[11px]" 
+                                              title={`Yardi Property Code: ${eMap.yardiEntityCode}`}
+                                            >
+                                              {eMap.yardiEntityCode}
+                                            </span>
+                                          </div>
+                                        ) : null
+                                      ) : (
+                                        <div className="mt-1">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenQuickMap('entity', details.payingEntityName, inv.propertyCode);
+                                            }}
+                                            className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 transition-all shadow-xs ring-1 ring-amber-400/80 cursor-pointer group"
+                                            title="Property is not mapped to Yardi Voyager. Click to configure Property Mapping."
+                                          >
+                                            <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                            <span>+ Property Mapping</span>
+                                          </button>
+                                        </div>
+                                      )
+                                    )}
                                   </td>
 
-                                  {/* CURRENCY */}
-                                  <td className="py-2.5 px-3 font-mono text-xs whitespace-nowrap">
-                                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
-                                      inv.currency === 'USD'
-                                        ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                        : inv.currency === 'EUR'
-                                        ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                                        : inv.currency === 'GBP'
-                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                        : inv.currency === 'CAD' || inv.currency === 'AUD'
-                                        ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                        : 'bg-purple-50 text-purple-800 border-purple-200'
-                                    }`}>
-                                      {inv.currency || 'USD'}
-                                    </span>
+                                  {/* 5. PAYING BANK NAME */}
+                                  <td className="py-3 px-3.5 text-xs font-mono text-gray-700 min-w-[190px]">
+                                    <div className="line-clamp-1 font-medium text-gray-800" title={details.payingBankName}>
+                                      {details.payingBankName}
+                                    </div>
                                   </td>
 
-                                  {/* ORIGINAL AMOUNT */}
-                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-gray-900 whitespace-nowrap text-xs">
-                                    <div>{formatCurrency(inv.amount, inv.currency)}</div>
+                                  {/* 6. AMOUNT */}
+                                  <td className="py-3 px-3.5 text-right font-mono font-bold text-gray-900 whitespace-nowrap text-xs min-w-[110px]">
+                                    <div>{details.formattedAmount}</div>
                                     {isCrossCurrency && (
-                                      <span className="text-[10px] text-orange-600 font-sans font-semibold">
+                                      <span className="text-[10px] text-orange-600 font-sans font-medium block">
                                         FX @ {inv.exchangeRate?.toFixed(4) || '1.0000'}
                                       </span>
                                     )}
                                   </td>
 
-                                  {/* BATCH SOURCE COLUMN CELL */}
-                                  <td className="py-2.5 px-3 whitespace-nowrap">
-                                    {inv.removedFromBatchId ? (
-                                      <div 
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded-md font-mono text-[11px] font-bold shadow-2xs" 
-                                        title={`Removed from previous batch: ${inv.removedFromBatchId}`}
-                                      >
-                                        <RotateCcw className="w-3 h-3 text-amber-600 shrink-0" />
-                                        <span>{inv.removedFromBatchId}</span>
-                                      </div>
+                                  {/* 7. ALLOCATION */}
+                                  <td className="py-3 px-3.5 font-mono text-xs text-gray-800 whitespace-nowrap">
+                                    {hasMultipleSplits ? (
+                                      <span className="px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded text-[10px] font-bold inline-flex items-center gap-1" title={details.allocation}>
+                                        <Building2 className="w-2.5 h-2.5 text-purple-600" />
+                                        <span>{details.allocation}</span>
+                                      </span>
                                     ) : (
-                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md text-[11px] font-semibold shadow-2xs">
-                                        <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
-                                        <span>New Invoice</span>
+                                      <span className="font-semibold text-gray-700">
+                                        {details.allocation}
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* 8. DUE DATE */}
+                                  <td className="py-3 px-3.5 font-mono text-gray-700 whitespace-nowrap text-xs">
+                                    {details.dueDate}
+                                  </td>
+
+                                  {/* 9. CURRENCY */}
+                                  <td className="py-3 px-3.5 font-mono text-xs whitespace-nowrap">
+                                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                                      details.currency === 'USD'
+                                        ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                        : details.currency === 'EUR'
+                                        ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                                        : details.currency === 'GBP'
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                        : details.currency === 'CAD' || details.currency === 'AUD'
+                                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                        : 'bg-purple-50 text-purple-800 border-purple-200'
+                                    }`}>
+                                      {details.currency}
+                                    </span>
+                                  </td>
+
+                                  {/* 10. VENDOR NAME */}
+                                  <td className={`py-3 px-3.5 text-xs min-w-[190px] transition-colors ${
+                                    !isVndMapped 
+                                      ? 'bg-amber-100/90 text-amber-950 font-semibold border-x border-amber-300/80' 
+                                      : ''
+                                  }`}>
+                                    <div className="font-semibold text-gray-900 line-clamp-1" title={details.vendorName}>
+                                      {details.vendorName}
+                                    </div>
+                                    {isVndMapped ? (
+                                      vMap?.yardiVendorCode ? (
+                                        <div className="mt-0.5">
+                                          <span 
+                                            className="font-mono text-gray-700 font-bold text-[11px]" 
+                                            title={`Yardi Vendor Code: ${vMap.yardiVendorCode}`}
+                                          >
+                                            {vMap.yardiVendorCode}
+                                          </span>
+                                        </div>
+                                      ) : null
+                                    ) : (
+                                      <div className="mt-1">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenQuickMap('vendor', details.vendorName, inv.vendorCode);
+                                          }}
+                                          className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 transition-all shadow-xs ring-1 ring-amber-400/80 cursor-pointer group"
+                                          title="Vendor is not mapped to Yardi PayScan. Click to configure Vendor Mapping."
+                                        >
+                                          <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                          <span>+ Vendor Mapping</span>
+                                        </button>
                                       </div>
                                     )}
                                   </td>
 
-                                  {/* ACTION ICONS */}
-                                  <td className="py-2.5 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-center gap-1">
+                                  {/* 11. BENEFICIARY NAME */}
+                                  <td className="py-3 px-3.5 text-xs text-gray-800 min-w-[190px]">
+                                    <div className="font-medium text-gray-900 line-clamp-1" title={details.beneficiaryName}>
+                                      {details.beneficiaryName}
+                                    </div>
+                                  </td>
+
+                                  {/* 12. BENEFICIARY BANK BIC CODE */}
+                                  <td className="py-3 px-3.5 font-mono text-xs font-bold text-slate-800 whitespace-nowrap tracking-wide">
+                                    {details.beneficiaryBankBic}
+                                  </td>
+
+                                  {/* 13. BENEFICIARY BANK NAME */}
+                                  <td className="py-3 px-3.5 text-xs text-gray-700 min-w-[190px]">
+                                    <div className="line-clamp-1 font-medium text-gray-800" title={details.beneficiaryBankName}>
+                                      {details.beneficiaryBankName}
+                                    </div>
+                                  </td>
+
+                                  {/* ACTIONS & DETAILS */}
+                                  <td className={`py-3 px-3.5 text-center whitespace-nowrap sticky right-0 z-10 ${rowBgClass} border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)] min-w-[120px]`} onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      {!isRowFullyMapped && (
+                                        <div className="flex items-center gap-1">
+                                          {!isPropMapped && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const targetProp = !isSrcMapped && details.sourceEntityName ? details.sourceEntityName : (hasMultipleSplits && unmappedSplits.length > 0 ? unmappedSplits[0].entityName : details.payingEntityName);
+                                                handleOpenQuickMap('entity', targetProp);
+                                              }}
+                                              className="px-2 py-1 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-950 border border-amber-300 rounded font-mono text-[9.5px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs cursor-pointer group"
+                                              title="Click to configure Property Mapping"
+                                            >
+                                              <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                              <span>Property</span>
+                                            </button>
+                                          )}
+                                          {!isVndMapped && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenQuickMap('vendor', details.vendorName, inv.vendorCode);
+                                              }}
+                                              className="px-2 py-1 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-950 border border-amber-300 rounded font-mono text-[9.5px] font-bold inline-flex items-center gap-1 transition-all shadow-2xs cursor-pointer group"
+                                              title="Click to configure Vendor Mapping"
+                                            >
+                                              <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                              <span>Vendor</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                      {inv.removedFromBatchId && (
+                                        <span 
+                                          className="p-1 text-amber-700 bg-amber-50 rounded border border-amber-200 inline-block" 
+                                          title={`Removed from previous batch: ${inv.removedFromBatchId}`}
+                                        >
+                                          <RotateCcw className="w-3 h-3" />
+                                        </span>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={(e) => handleInspectInvoice(inv, e)}
@@ -1396,7 +1888,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                 {/* EXPANDED DETAILS */}
                                 {isExpanded && (
                                   <tr className="bg-[#FFF8F3] border-b-2 border-orange-200/80">
-                                    <td colSpan={9} className="p-4 pl-10">
+                                    <td colSpan={15} className="p-4 pl-10">
                                       <div className="bg-white border border-orange-200/90 rounded-xl p-4 shadow-xs space-y-3.5 ring-1 ring-orange-100/80">
                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-100 pb-2.5">
                                           <div className="flex items-center gap-2 flex-wrap">
@@ -1443,20 +1935,41 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                               <tbody className="divide-y divide-purple-50">
                                                 {entitySplits.map((sp, sIdx) => {
                                                   const mappedProperty = findEntityMapping(sp.entityName, entityMappings);
+                                                  const isSplitMapped = !!(mappedProperty?.yardiEntityCode && mappedProperty.status === 'Mapped');
                                                   return (
-                                                    <tr key={sIdx} className="hover:bg-purple-50/40">
-                                                      <td className="py-1.5 px-3 font-semibold text-gray-900">
+                                                    <tr 
+                                                      key={sIdx} 
+                                                      className={
+                                                        !isSplitMapped 
+                                                          ? "bg-amber-100/90 hover:bg-amber-200/80 border-l-4 border-l-amber-500 border-b border-amber-200 font-medium transition-colors shadow-2xs" 
+                                                          : "hover:bg-purple-50/40 border-l-4 border-l-transparent transition-colors"
+                                                      }
+                                                    >
+                                                      <td className={`py-1.5 px-3 font-semibold ${!isSplitMapped ? 'text-amber-950' : 'text-gray-900'}`}>
                                                         {sp.entityName}
                                                       </td>
-                                                      <td className="py-1.5 px-3 font-mono text-gray-700">
-                                                        {mappedProperty?.yardiEntityCode ? (
-                                                          <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 rounded font-bold text-[10px]">
+                                                      <td className={`py-1.5 px-3 font-mono transition-colors ${
+                                                        !isSplitMapped 
+                                                          ? 'bg-amber-200/70 text-amber-950 font-bold border-x border-amber-300/90' 
+                                                          : 'text-gray-700'
+                                                      }`}>
+                                                        {mappedProperty?.yardiEntityCode && mappedProperty.status === 'Mapped' ? (
+                                                          <span className="font-mono text-gray-800 font-bold text-[11px]">
                                                             {mappedProperty.yardiEntityCode}
                                                           </span>
                                                         ) : (
-                                                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded font-bold text-[10px]">
-                                                            Unmapped
-                                                          </span>
+                                                          <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              handleOpenQuickMap('entity', sp.entityName);
+                                                            }}
+                                                            className="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-950 border border-amber-400 rounded font-mono text-[9.5px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all shadow-xs ring-1 ring-amber-400/80 group"
+                                                            title="Click to configure Property Mapping"
+                                                          >
+                                                            <Plus className="w-2.5 h-2.5 text-amber-800 group-hover:scale-110 transition-transform" />
+                                                            <span>+ Property Mapping</span>
+                                                          </button>
                                                         )}
                                                       </td>
                                                       <td className="py-1.5 px-3 text-right font-mono font-bold text-purple-900">
@@ -1521,46 +2034,76 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
 
             <div className="flex items-center gap-3">
               {activeTab === 'invoices' ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('loader')}
-                  className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>Preview & Edit Loader File</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateSubmit('Draft')}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Save as Draft
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGoToLoaderTab}
+                    className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 shadow-xs ${
+                      hasUnmapped
+                        ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300'
+                        : 'bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white'
+                    }`}
+                    title={
+                      hasUnmapped
+                        ? 'Complete all required property and vendor mappings on this batch screen before proceeding'
+                        : 'Proceed to Loader File Preview & Inline Edit'
+                    }
+                  >
+                    {hasUnmapped ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5 text-amber-800 shrink-0" />
+                        <span>Required Mapping Pending ({(batchValidation.missingVendors?.length || 0) + (batchValidation.missingEntities?.length || 0)}) — Map to Proceed</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Proceed to Next Screen: Loader File Preview</span>
+                        <ArrowRight className="w-4 h-4 shrink-0" />
+                      </>
+                    )}
+                  </button>
+                </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('invoices')}
-                  className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to Invoices Selection</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('invoices')}
+                    className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Invoices Selection</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCreateSubmit('Draft')}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Save as Draft
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={selectedInvoices.length === 0}
+                    onClick={() => handleCreateSubmit('Ready')}
+                    className={`px-5 py-2 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-xs transition-colors cursor-pointer ${
+                      selectedInvoices.length === 0
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C]'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Create & Export Batch ({etlRecords.length} GL Rows)</span>
+                  </button>
+                </>
               )}
-
-              <button
-                type="button"
-                onClick={() => handleCreateSubmit('Draft')}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-              >
-                Save as Draft
-              </button>
-
-              <button
-                type="button"
-                disabled={selectedInvoices.length === 0}
-                onClick={() => handleCreateSubmit('Ready')}
-                className={`px-5 py-2 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-xs transition-colors cursor-pointer ${
-                  selectedInvoices.length === 0
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C]'
-                }`}
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Create & Export Batch ({etlRecords.length} GL Rows)</span>
-              </button>
             </div>
           </div>
         </div>

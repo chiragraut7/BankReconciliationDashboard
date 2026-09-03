@@ -22,7 +22,9 @@ import {
   generateAutoYardiVendorCode,
   generateAutoYardiEntityCode,
   saveStoredVendorMappings,
-  saveStoredEntityMappings
+  saveStoredEntityMappings,
+  resetToDefaultVendorMappings,
+  resetToDefaultEntityMappings
 } from '../utils/yardiMapping';
 
 interface MappingManagerModalProps {
@@ -142,6 +144,21 @@ export const MappingManagerModal: React.FC<MappingManagerModalProps> = ({
 
     setSaveSuccessMsg(`Auto-mapped ${generatedCount} missing codes successfully!`);
     setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  const handleResetToDemoDefaults = () => {
+    if (confirm('Reset mappings to default demo state? This will restore the demo unmapped properties (such as Novus Lux Stonegate 05 SCSp and Apollo Hybrid Value Lux) so you can test the mapping guard.')) {
+      const defaultV = resetToDefaultVendorMappings();
+      const defaultE = resetToDefaultEntityMappings();
+      setLocalVendors(defaultV);
+      setLocalEntities(defaultE);
+      onUpdateVendorMappings(defaultV);
+      onUpdateEntityMappings(defaultE);
+      saveStoredVendorMappings(defaultV);
+      saveStoredEntityMappings(defaultE);
+      setSaveSuccessMsg('Restored demo mappings with unmapped properties for testing.');
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
+    }
   };
 
   const handleSaveAll = () => {
@@ -269,6 +286,14 @@ export const MappingManagerModal: React.FC<MappingManagerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleResetToDemoDefaults}
+              className="px-2.5 py-1.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              title="Reset to default demo mappings with unmapped properties for testing"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+              <span>Reset Demo Data</span>
+            </button>
             <button
               onClick={handleAutoGenerateAllMissing}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
@@ -527,7 +552,7 @@ export const MappingManagerModal: React.FC<MappingManagerModalProps> = ({
                             )}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {isUnmapped && (
+                            {isUnmapped ? (
                               <button
                                 onClick={() => {
                                   const auto = generateAutoYardiVendorCode(v.ourVendorName);
@@ -537,6 +562,16 @@ export const MappingManagerModal: React.FC<MappingManagerModalProps> = ({
                               >
                                 <Sparkles className="w-3 h-3" />
                                 Auto Code
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  handleVendorFieldChange(v.id, 'yardiVendorCode', '');
+                                }}
+                                className="px-2 py-1 text-gray-400 hover:text-amber-700 hover:bg-amber-50 border border-gray-200 hover:border-amber-300 rounded text-[10px] font-semibold transition-colors cursor-pointer"
+                                title="Clear Yardi code to mark this vendor as Unmapped for testing"
+                              >
+                                Unmap
                               </button>
                             )}
                           </td>
@@ -681,7 +716,7 @@ export const MappingManagerModal: React.FC<MappingManagerModalProps> = ({
                             )}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {isUnmapped && (
+                            {isUnmapped ? (
                               <button
                                 onClick={() => {
                                   const auto = generateAutoYardiEntityCode(e.ourEntityName);
@@ -691,6 +726,16 @@ export const MappingManagerModal: React.FC<MappingManagerModalProps> = ({
                               >
                                 <Sparkles className="w-3 h-3" />
                                 Auto Code
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  handleEntityFieldChange(e.id, 'yardiEntityCode', '');
+                                }}
+                                className="px-2 py-1 text-gray-400 hover:text-amber-700 hover:bg-amber-50 border border-gray-200 hover:border-amber-300 rounded text-[10px] font-semibold transition-colors cursor-pointer"
+                                title="Clear Yardi code to mark this property as Unmapped for testing"
+                              >
+                                Unmap
                               </button>
                             )}
                           </td>

@@ -3,7 +3,7 @@ import { InvoiceBatchItem, MatchedInvoice } from '../types/reconciliation';
 import { INITIAL_YARDI_VENDOR_MAPPINGS, INITIAL_YARDI_ENTITY_MAPPINGS } from '../data/yardiMappingData';
 
 const VENDOR_STORAGE_KEY = 'RECON_YARDI_VENDOR_MAPPINGS_V1';
-const ENTITY_STORAGE_KEY = 'RECON_YARDI_ENTITY_MAPPINGS_V1';
+const ENTITY_STORAGE_KEY = 'RECON_YARDI_ENTITY_MAPPINGS_V3';
 
 /**
  * Loads vendor mappings from LocalStorage with fallback to initial defaults.
@@ -19,6 +19,18 @@ export function getStoredVendorMappings(): YardiVendorMapping[] {
     }
   } catch (err) {
     console.error('Failed to load vendor mappings from storage:', err);
+  }
+  return INITIAL_YARDI_VENDOR_MAPPINGS;
+}
+
+/**
+ * Resets vendor mappings back to default demo mappings.
+ */
+export function resetToDefaultVendorMappings(): YardiVendorMapping[] {
+  try {
+    localStorage.removeItem(VENDOR_STORAGE_KEY);
+  } catch (err) {
+    console.error('Failed to reset vendor mappings:', err);
   }
   return INITIAL_YARDI_VENDOR_MAPPINGS;
 }
@@ -48,6 +60,20 @@ export function getStoredEntityMappings(): YardiEntityMapping[] {
     }
   } catch (err) {
     console.error('Failed to load entity mappings from storage:', err);
+  }
+  return INITIAL_YARDI_ENTITY_MAPPINGS;
+}
+
+/**
+ * Resets entity mappings back to default demo mappings (with unmapped properties).
+ */
+export function resetToDefaultEntityMappings(): YardiEntityMapping[] {
+  try {
+    localStorage.removeItem(ENTITY_STORAGE_KEY);
+    // Also clean up legacy v1 if present
+    localStorage.removeItem('RECON_YARDI_ENTITY_MAPPINGS_V1');
+  } catch (err) {
+    console.error('Failed to reset entity mappings:', err);
   }
   return INITIAL_YARDI_ENTITY_MAPPINGS;
 }
@@ -202,6 +228,12 @@ export function validateBatchMappings(
 
     if (targetEntities.length === 0) {
       targetEntities.push(inv.payingEntity || inv.entity || inv.entityName || 'Default Operating Entity');
+    }
+
+    // Also include sourceEntityName if specified and not already in targetEntities
+    const sourceEnt = (inv as any).sourceEntityName || inv.entity;
+    if (sourceEnt && !targetEntities.includes(sourceEnt)) {
+      targetEntities.push(sourceEnt);
     }
 
     // Deduplicate entities for this invoice check

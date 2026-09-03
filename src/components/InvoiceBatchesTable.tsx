@@ -309,7 +309,7 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
                 {/* 1. Batch ID */}
                 <th
                   onClick={() => handleSort('id')}
-                  className="py-3 px-4 cursor-pointer hover:text-gray-900 transition-colors"
+                  className="py-3 px-4 cursor-pointer hover:text-gray-900 transition-colors w-[130px] min-w-[130px] sticky left-0 z-20 bg-gray-50/95 backdrop-blur-xs border-r border-gray-200/50"
                 >
                   <div className="flex items-center gap-1.5">
                     <span>Batch ID</span>
@@ -320,7 +320,7 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
                 {/* 2. Batch Name */}
                 <th
                   onClick={() => handleSort('name')}
-                  className="py-3 px-4 cursor-pointer hover:text-gray-900 transition-colors min-w-[220px]"
+                  className="py-3 px-4 cursor-pointer hover:text-gray-900 transition-colors min-w-[220px] sticky left-[130px] z-20 bg-gray-50/95 backdrop-blur-xs border-r border-gray-200/80 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.07)]"
                 >
                   <div className="flex items-center gap-1.5">
                     <span>Batch Name</span>
@@ -373,7 +373,7 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
                 </th>
 
                 {/* 6. Action Buttons */}
-                <th className="py-3 px-4 text-center">
+                <th className="py-3 px-4 text-center w-[100px] min-w-[100px] sticky right-0 z-20 bg-gray-50/95 backdrop-blur-xs border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)]">
                   <span>Action</span>
                 </th>
               </tr>
@@ -413,7 +413,7 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
                       className="hover:bg-gray-50/90 transition-colors cursor-pointer group"
                     >
                       {/* 1. Batch ID */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 w-[130px] min-w-[130px] sticky left-0 z-10 bg-white group-hover:bg-gray-50 transition-colors border-r border-gray-200/50">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-gray-900 bg-gray-100 group-hover:bg-orange-100 group-hover:text-[#EA580C] px-2 py-0.5 rounded border border-gray-200 transition-colors">
                             {batch.id}
@@ -422,7 +422,7 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
                       </td>
 
                       {/* 2. Batch Name & Format */}
-                      <td className="py-3.5 px-4 min-w-[220px]">
+                      <td className="py-3.5 px-4 min-w-[220px] sticky left-[130px] z-10 bg-white group-hover:bg-gray-50 transition-colors border-r border-gray-200/80 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.07)]">
                         <div>
                           <span className="font-bold text-gray-900 block truncate group-hover:text-[#EA580C] transition-colors">
                             {batch.name}
@@ -489,7 +489,7 @@ export const InvoiceBatchesTable: React.FC<InvoiceBatchesTableProps> = ({
                       </td>
 
                       {/* 6. Action Menu */}
-                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3.5 px-4 text-center w-[100px] min-w-[100px] sticky right-0 z-10 bg-white group-hover:bg-gray-50 transition-colors border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)]" onClick={(e) => e.stopPropagation()}>
                         <div 
                           className="relative inline-block text-left group/action"
                           onMouseLeave={() => {
