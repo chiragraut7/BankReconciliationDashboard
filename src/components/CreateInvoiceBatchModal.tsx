@@ -38,7 +38,8 @@ import {
   Table, 
   Code,
   Plus,
-  Lock
+  Lock,
+  Edit3
 } from 'lucide-react';
 import { ReconciliationRun, InvoiceBatch, InvoiceETLFormat, InvoiceBatchItem, BankTransaction, MatchedInvoice } from '../types/reconciliation';
 import { INITIAL_INVOICES } from '../data/mockData';
@@ -337,6 +338,41 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     return items;
   }, [reconciliationRuns, removedInvoices]);
 
+  // Custom user edits made to invoices in Step 1 or synced from Step 2 (e.g. Notes/Memo, Client Ref, Due Date)
+  const [invoiceCustomData, setInvoiceCustomData] = useState<Record<string, {
+    notes?: string;
+    memo?: string;
+    clientReference?: string;
+    dueDate?: string;
+    description?: string;
+    amount?: number;
+    glCode?: string;
+  }>>({});
+
+  // Step 1 inline editing states
+  const [editingStep1NoteId, setEditingStep1NoteId] = useState<string | null>(null);
+  const [tempStep1NoteText, setTempStep1NoteText] = useState('');
+  const [editingStep1Field, setEditingStep1Field] = useState<{ id: string; field: string } | null>(null);
+  const [tempStep1FieldValue, setTempStep1FieldValue] = useState('');
+
+  // Merge custom user edits into allReconciledInvoices so both views stay 100% consistent
+  const reconciledInvoicesWithCustom = useMemo(() => {
+    return allReconciledInvoices.map(inv => {
+      const custom = invoiceCustomData[inv.id];
+      if (!custom) return inv;
+      return {
+        ...inv,
+        ...custom,
+        notes: custom.notes ?? inv.notes,
+        memo: custom.memo ?? inv.memo ?? custom.notes,
+        clientReference: custom.clientReference ?? inv.clientReference,
+        dueDate: custom.dueDate ?? inv.dueDate,
+        description: custom.description ?? inv.description,
+        amount: custom.amount ?? inv.amount
+      };
+    });
+  }, [allReconciledInvoices, invoiceCustomData]);
+
   // Selected Invoices Set - default to selecting the fresh (new) reconciled invoices
   const [selectedInvoiceKeys, setSelectedInvoiceKeys] = useState<Set<string>>(() => {
     const defaultSelected = new Set<string>();
@@ -349,33 +385,33 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
   // Unique lists for filters
   const uniqueCurrencies = useMemo(() => {
     const set = new Set<string>();
-    allReconciledInvoices.forEach(inv => {
+    reconciledInvoicesWithCustom.forEach(inv => {
       if (inv.currency) set.add(inv.currency);
     });
     return Array.from(set).sort();
-  }, [allReconciledInvoices]);
+  }, [reconciledInvoicesWithCustom]);
 
   const uniqueCategories = useMemo(() => {
     const set = new Set<string>();
-    allReconciledInvoices.forEach(inv => {
+    reconciledInvoicesWithCustom.forEach(inv => {
       if (inv.expensesType) set.add(inv.expensesType);
       else if (inv.category) set.add(inv.category);
     });
     return Array.from(set).sort();
-  }, [allReconciledInvoices]);
+  }, [reconciledInvoicesWithCustom]);
 
   const removedInvoicesCount = useMemo(() => {
-    return allReconciledInvoices.filter(inv => !!inv.removedFromBatchId).length;
-  }, [allReconciledInvoices]);
+    return reconciledInvoicesWithCustom.filter(inv => !!inv.removedFromBatchId).length;
+  }, [reconciledInvoicesWithCustom]);
 
   const freshInvoicesCount = useMemo(() => {
-    return allReconciledInvoices.filter(inv => !inv.removedFromBatchId).length;
-  }, [allReconciledInvoices]);
+    return reconciledInvoicesWithCustom.filter(inv => !inv.removedFromBatchId).length;
+  }, [reconciledInvoicesWithCustom]);
 
   const { unmappedInvoicesCount, mappedInvoicesCount } = useMemo(() => {
     let unmapped = 0;
     let mapped = 0;
-    allReconciledInvoices.forEach(inv => {
+    reconciledInvoicesWithCustom.forEach(inv => {
       if (isInvoiceRecordFullyMapped(inv, vendorMappings, entityMappings)) {
         mapped++;
       } else {
@@ -383,7 +419,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
       }
     });
     return { unmappedInvoicesCount: unmapped, mappedInvoicesCount: mapped };
-  }, [allReconciledInvoices, vendorMappings, entityMappings]);
+  }, [reconciledInvoicesWithCustom, vendorMappings, entityMappings]);
 
   // Date Preset handler
   const handleDatePresetChange = (preset: 'All' | 'Last7Days' | 'Last30Days' | 'Aug2026' | 'Sep2026' | 'Custom') => {
@@ -419,7 +455,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
 
   // Filter and sort items
   const filteredInvoices = useMemo(() => {
-    return allReconciledInvoices
+    return reconciledInvoicesWithCustom
       .filter(inv => {
         const matchesCategory = selectedCategoryFilter === 'All' || inv.expensesType === selectedCategoryFilter || inv.category === selectedCategoryFilter;
         const matchesType = selectedTypeFilter === 'All' || inv.type === selectedTypeFilter;
@@ -466,6 +502,8 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
           details.dueDate.toLowerCase().includes(searchLower) ||
           (inv.jobNumber && inv.jobNumber.toLowerCase().includes(searchLower)) ||
           (inv.poNumber && inv.poNumber.toLowerCase().includes(searchLower)) ||
+          (inv.notes && inv.notes.toLowerCase().includes(searchLower)) ||
+          (inv.memo && inv.memo.toLowerCase().includes(searchLower)) ||
           (inv.removedFromBatchId && inv.removedFromBatchId.toLowerCase().includes(searchLower)) ||
           (inv.removalReason && inv.removalReason.toLowerCase().includes(searchLower)) ||
           (inv.description && inv.description.toLowerCase().includes(searchLower)) ||
@@ -520,12 +558,12 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
         }
         return sortOrder === 'asc' ? comparison : -comparison;
       });
-  }, [allReconciledInvoices, selectedCategoryFilter, selectedTypeFilter, selectedCurrencyFilter, selectedSourceFilter, startDate, endDate, searchTerm, sortField, sortOrder, hideMappedInvoices, vendorMappings, entityMappings]);
+  }, [reconciledInvoicesWithCustom, selectedCategoryFilter, selectedTypeFilter, selectedCurrencyFilter, selectedSourceFilter, startDate, endDate, searchTerm, sortField, sortOrder, hideMappedInvoices, vendorMappings, entityMappings]);
 
   // Selected invoice objects
   const selectedInvoices = useMemo(() => {
-    return allReconciledInvoices.filter(inv => selectedInvoiceKeys.has(`${inv.sourceRunId}_${inv.id}`));
-  }, [allReconciledInvoices, selectedInvoiceKeys]);
+    return reconciledInvoicesWithCustom.filter(inv => selectedInvoiceKeys.has(`${inv.sourceRunId}_${inv.id}`));
+  }, [reconciledInvoicesWithCustom, selectedInvoiceKeys]);
 
   // Aggregated totals of selected invoices (in USD equivalent)
   const batchTotals = useMemo(() => {
@@ -573,7 +611,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
     return formatEtlContent(etlRecords, format, batchId);
   }, [etlRecords, format, batchId]);
 
-  // Handle single record override update
+  // Handle single record override update in Step 2 (syncing notes back to Step 1 if updated)
   const handleUpdateRecordOverride = (recordId: string, override: Partial<EtlRecordOverride>) => {
     setRecordOverrides(prev => ({
       ...prev,
@@ -582,10 +620,59 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
         ...override
       }
     }));
+
+    if (override.notes !== undefined) {
+      const rec = etlRecords.find(r => r.id === recordId);
+      if (rec) {
+        setInvoiceCustomData(prev => ({
+          ...prev,
+          [rec.invoiceId]: {
+            ...(prev[rec.invoiceId] || {}),
+            notes: override.notes,
+            memo: override.notes
+          }
+        }));
+      }
+    }
+
+    if (override.clientReference !== undefined) {
+      const rec = etlRecords.find(r => r.id === recordId);
+      if (rec) {
+        setInvoiceCustomData(prev => ({
+          ...prev,
+          [rec.invoiceId]: {
+            ...(prev[rec.invoiceId] || {}),
+            clientReference: override.clientReference
+          }
+        }));
+      }
+    }
+
+    if (override.dueDate !== undefined) {
+      const rec = etlRecords.find(r => r.id === recordId);
+      if (rec) {
+        setInvoiceCustomData(prev => ({
+          ...prev,
+          [rec.invoiceId]: {
+            ...(prev[rec.invoiceId] || {}),
+            dueDate: override.dueDate
+          }
+        }));
+      }
+    }
   };
 
-  // Handle applying a single note to all exploded lines of an invoice
+  // Handle applying a single note to all exploded lines of an invoice (syncs Step 1 and Step 2)
   const handleApplyNoteToInvoice = (invoiceId: string, note: string) => {
+    setInvoiceCustomData(prev => ({
+      ...prev,
+      [invoiceId]: {
+        ...(prev[invoiceId] || {}),
+        notes: note,
+        memo: note
+      }
+    }));
+
     setRecordOverrides(prev => {
       const next = { ...prev };
       etlRecords.forEach(r => {
@@ -598,6 +685,71 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
       });
       return next;
     });
+  };
+
+  // Handle updating an invoice's Notes / Memo in Step 1 (Select Reconciled Invoices)
+  const handleUpdateInvoiceNoteInStep1 = (invoiceId: string, note: string) => {
+    setInvoiceCustomData(prev => ({
+      ...prev,
+      [invoiceId]: {
+        ...(prev[invoiceId] || {}),
+        notes: note,
+        memo: note
+      }
+    }));
+
+    // Instantly propagate override to all generated ETL records in Step 2 so Loader File Preview & Inline Edit is in sync!
+    setRecordOverrides(prev => {
+      const next = { ...prev };
+      etlRecords.forEach(r => {
+        if (r.invoiceId === invoiceId) {
+          next[r.id] = {
+            ...(next[r.id] || {}),
+            notes: note
+          };
+        }
+      });
+      return next;
+    });
+  };
+
+  // Handle updating other editable fields in Step 1 (e.g. clientReference, dueDate, description)
+  const handleUpdateInvoiceFieldInStep1 = (invoiceId: string, field: 'clientReference' | 'dueDate' | 'description', value: string) => {
+    setInvoiceCustomData(prev => ({
+      ...prev,
+      [invoiceId]: {
+        ...(prev[invoiceId] || {}),
+        [field]: value
+      }
+    }));
+
+    if (field === 'description') {
+      setRecordOverrides(prev => {
+        const next = { ...prev };
+        etlRecords.forEach(r => {
+          if (r.invoiceId === invoiceId) {
+            next[r.id] = {
+              ...(next[r.id] || {}),
+              lineDescription: value
+            };
+          }
+        });
+        return next;
+      });
+    } else if (field === 'dueDate') {
+      setRecordOverrides(prev => {
+        const next = { ...prev };
+        etlRecords.forEach(r => {
+          if (r.invoiceId === invoiceId) {
+            next[r.id] = {
+              ...(next[r.id] || {}),
+              dueDate: value
+            };
+          }
+        });
+        return next;
+      });
+    }
   };
 
   // Reset all overrides
@@ -1037,7 +1189,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                 <Table className="w-4 h-4" />
                 <span>1. Select Reconciled Invoices</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-gray-200 text-gray-800">
-                  {selectedInvoices.length} of {allReconciledInvoices.length}
+                  {selectedInvoices.length} of {reconciledInvoicesWithCustom.length}
                 </span>
               </button>
 
@@ -1456,6 +1608,14 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                             </div>
                           </th>
 
+                          {/* 14. NOTES / MEMO (EDITABLE) */}
+                          <th className="py-3 px-3.5 min-w-[260px] bg-orange-50/60 text-gray-900 font-bold border-x border-orange-200/80 select-none">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900">
+                              <Edit3 className="w-3.5 h-3.5 text-[#EA580C]" />
+                              <span>Notes / Memo (Editable)</span>
+                            </div>
+                          </th>
+
                           {/* ACTIONS & DETAILS */}
                           <th className="py-3 px-3.5 text-center min-w-[120px] sticky right-0 z-20 bg-gray-50/95 backdrop-blur-xs border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)]">
                             Actions
@@ -1465,7 +1625,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                       <tbody className="divide-y divide-gray-100 text-xs">
                         {filteredInvoices.length === 0 ? (
                           <tr>
-                            <td colSpan={15} className="py-12 text-center text-gray-500">
+                            <td colSpan={16} className="py-12 text-center text-gray-500">
                               {hideMappedInvoices ? (
                                 <div className="max-w-md mx-auto">
                                   <div className="w-10 h-10 mx-auto rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 shadow-xs">
@@ -1602,9 +1762,49 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                     </div>
                                   </td>
 
-                                  {/* 2. CLIENT REFERENCE */}
-                                  <td className="py-3 px-3.5 font-mono text-xs whitespace-nowrap text-gray-700 font-medium">
-                                    {details.clientReference}
+                                  {/* 2. CLIENT REFERENCE (EDITABLE) */}
+                                  <td className="py-3 px-3.5 font-mono text-xs whitespace-nowrap text-gray-700 font-medium" onClick={(e) => e.stopPropagation()}>
+                                    {editingStep1Field?.id === inv.id && editingStep1Field?.field === 'clientReference' ? (
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={tempStep1FieldValue}
+                                          onChange={(e) => setTempStep1FieldValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              handleUpdateInvoiceFieldInStep1(inv.id, 'clientReference', tempStep1FieldValue);
+                                              setEditingStep1Field(null);
+                                            } else if (e.key === 'Escape') {
+                                              setEditingStep1Field(null);
+                                            }
+                                          }}
+                                          autoFocus
+                                          className="px-2 py-0.5 text-xs font-mono border border-orange-400 rounded outline-hidden w-28 bg-white"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleUpdateInvoiceFieldInStep1(inv.id, 'clientReference', tempStep1FieldValue);
+                                            setEditingStep1Field(null);
+                                          }}
+                                          className="px-1.5 py-0.5 bg-[#EA580C] hover:bg-[#D94E07] text-white rounded text-[10px] font-bold cursor-pointer"
+                                        >
+                                          OK
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => {
+                                          setEditingStep1Field({ id: inv.id, field: 'clientReference' });
+                                          setTempStep1FieldValue(inv.clientReference || details.clientReference || '');
+                                        }}
+                                        className="group flex items-center gap-1.5 cursor-pointer hover:text-[#EA580C]"
+                                        title="Click to edit Client Reference"
+                                      >
+                                        <span>{inv.clientReference || details.clientReference}</span>
+                                        <Edit3 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 text-gray-400" />
+                                      </div>
+                                    )}
                                   </td>
 
                                   {/* 3. SOURCE ENTITY NAME */}
@@ -1737,9 +1937,49 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                     )}
                                   </td>
 
-                                  {/* 8. DUE DATE */}
-                                  <td className="py-3 px-3.5 font-mono text-gray-700 whitespace-nowrap text-xs">
-                                    {details.dueDate}
+                                  {/* 8. DUE DATE (EDITABLE) */}
+                                  <td className="py-3 px-3.5 font-mono text-gray-700 whitespace-nowrap text-xs" onClick={(e) => e.stopPropagation()}>
+                                    {editingStep1Field?.id === inv.id && editingStep1Field?.field === 'dueDate' ? (
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={tempStep1FieldValue}
+                                          onChange={(e) => setTempStep1FieldValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              handleUpdateInvoiceFieldInStep1(inv.id, 'dueDate', tempStep1FieldValue);
+                                              setEditingStep1Field(null);
+                                            } else if (e.key === 'Escape') {
+                                              setEditingStep1Field(null);
+                                            }
+                                          }}
+                                          autoFocus
+                                          className="px-2 py-0.5 text-xs font-mono border border-orange-400 rounded outline-hidden w-24 bg-white"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleUpdateInvoiceFieldInStep1(inv.id, 'dueDate', tempStep1FieldValue);
+                                            setEditingStep1Field(null);
+                                          }}
+                                          className="px-1.5 py-0.5 bg-[#EA580C] hover:bg-[#D94E07] text-white rounded text-[10px] font-bold cursor-pointer"
+                                        >
+                                          OK
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => {
+                                          setEditingStep1Field({ id: inv.id, field: 'dueDate' });
+                                          setTempStep1FieldValue(inv.dueDate || details.dueDate || '');
+                                        }}
+                                        className="group flex items-center gap-1 cursor-pointer hover:text-[#EA580C]"
+                                        title="Click to edit Due Date"
+                                      >
+                                        <span>{inv.dueDate || details.dueDate}</span>
+                                        <Edit3 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 text-gray-400" />
+                                      </div>
+                                    )}
                                   </td>
 
                                   {/* 9. CURRENCY */}
@@ -1816,6 +2056,71 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                     </div>
                                   </td>
 
+                                  {/* 14. NOTES / MEMO (EDITABLE) */}
+                                  <td className="py-2 px-3.5 text-xs min-w-[260px] bg-orange-50/20 border-x border-orange-200/40" onClick={(e) => e.stopPropagation()}>
+                                    {editingStep1NoteId === inv.id ? (
+                                      <div className="flex flex-col gap-1.5 bg-white p-2 border border-orange-400 rounded-lg shadow-md animate-in fade-in z-20">
+                                        <textarea
+                                          value={tempStep1NoteText}
+                                          onChange={(e) => setTempStep1NoteText(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                              handleUpdateInvoiceNoteInStep1(inv.id, tempStep1NoteText);
+                                              setEditingStep1NoteId(null);
+                                            } else if (e.key === 'Escape') {
+                                              setEditingStep1NoteId(null);
+                                            }
+                                          }}
+                                          rows={2}
+                                          className="w-full p-1.5 text-xs text-gray-900 border border-gray-300 rounded outline-hidden focus:border-[#EA580C] focus:ring-1 focus:ring-[#EA580C]"
+                                          placeholder="Enter note or memo for invoice and GL loader..."
+                                          autoFocus
+                                        />
+                                        <div className="flex items-center justify-between gap-1.5 text-[10px]">
+                                          <span className="text-gray-400 text-[10px] flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                                            Syncs to GL Loader
+                                          </span>
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => setEditingStep1NoteId(null)}
+                                              className="px-2 py-0.5 text-gray-500 hover:text-gray-800 cursor-pointer rounded"
+                                            >
+                                              Cancel
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                handleUpdateInvoiceNoteInStep1(inv.id, tempStep1NoteText);
+                                                setEditingStep1NoteId(null);
+                                              }}
+                                              className="px-2.5 py-0.5 bg-[#EA580C] hover:bg-[#D94E07] text-white font-bold rounded cursor-pointer shadow-xs"
+                                            >
+                                              Save Note
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => {
+                                          setEditingStep1NoteId(inv.id);
+                                          setTempStep1NoteText(inv.notes || inv.memo || details.notes || '');
+                                        }}
+                                        className="group flex items-center justify-between gap-2 px-2.5 py-1.5 bg-white hover:bg-orange-50/80 border border-gray-200 hover:border-orange-300 rounded-md cursor-pointer transition-all shadow-2xs"
+                                        title="Click to edit Notes / Memo for this invoice and update GL Loader View"
+                                      >
+                                        <span className="text-[11px] text-gray-800 line-clamp-1 flex-1 font-medium">
+                                          {inv.notes || inv.memo || details.notes || (
+                                            <span className="text-gray-400 italic">Click to add note / memo...</span>
+                                          )}
+                                        </span>
+                                        <Edit3 className="w-3 h-3 text-gray-400 group-hover:text-[#EA580C] shrink-0" />
+                                      </div>
+                                    )}
+                                  </td>
+
                                   {/* ACTIONS & DETAILS */}
                                   <td className={`py-3 px-3.5 text-center whitespace-nowrap sticky right-0 z-10 ${rowBgClass} border-l border-gray-200/80 shadow-[-4px_0_8px_-3px_rgba(0,0,0,0.07)] min-w-[120px]`} onClick={(e) => e.stopPropagation()}>
                                     <div className="flex items-center justify-center gap-1.5">
@@ -1862,6 +2167,18 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                       )}
                                       <button
                                         type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingStep1NoteId(inv.id);
+                                          setTempStep1NoteText(inv.notes || inv.memo || details.notes || '');
+                                        }}
+                                        className="p-1.5 bg-white hover:bg-orange-50 text-gray-500 hover:text-[#EA580C] border border-gray-200 hover:border-orange-300 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                                        title="Edit Notes / Memo for GL Loader"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
                                         onClick={(e) => handleInspectInvoice(inv, e)}
                                         className="p-1.5 bg-white hover:bg-orange-50 text-gray-500 hover:text-[#EA580C] border border-gray-200 hover:border-orange-300 rounded-lg shadow-2xs transition-colors cursor-pointer"
                                         title="Inspect invoice details"
@@ -1888,7 +2205,7 @@ export const CreateInvoiceBatchModal: React.FC<CreateInvoiceBatchModalProps> = (
                                 {/* EXPANDED DETAILS */}
                                 {isExpanded && (
                                   <tr className="bg-[#FFF8F3] border-b-2 border-orange-200/80">
-                                    <td colSpan={15} className="p-4 pl-10">
+                                    <td colSpan={16} className="p-4 pl-10">
                                       <div className="bg-white border border-orange-200/90 rounded-xl p-4 shadow-xs space-y-3.5 ring-1 ring-orange-100/80">
                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-100 pb-2.5">
                                           <div className="flex items-center gap-2 flex-wrap">

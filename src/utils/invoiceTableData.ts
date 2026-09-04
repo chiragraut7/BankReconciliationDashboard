@@ -18,6 +18,8 @@ export interface InvoiceTableDisplayData {
   beneficiaryName: string;
   beneficiaryBankBic: string;
   beneficiaryBankName: string;
+  notes?: string;
+  memo?: string;
 }
 
 // Map known vendors to realistic beneficiary banks & BIC codes
@@ -168,6 +170,10 @@ export function getInvoiceTableDetails(inv: MatchedInvoice | InvoiceBatchItem | 
   const beneficiaryBankBic = inv.beneficiaryBankBic || defaultBankInfo.bic;
   const beneficiaryBankName = inv.beneficiaryBankName || defaultBankInfo.bank;
 
+  // Notes / Memo
+  const notes = inv.notes || inv.memo || (inv.description ? `Reconciled • ${inv.description}` : `Inv ${invoiceNumber} • OPEX`);
+  const memo = inv.memo || inv.notes || '';
+
   return {
     invoiceNumber,
     invoiceIdDisplay: inv.invoiceIdDisplay,
@@ -185,6 +191,8 @@ export function getInvoiceTableDetails(inv: MatchedInvoice | InvoiceBatchItem | 
     vendorName,
     beneficiaryName,
     beneficiaryBankBic,
-    beneficiaryBankName
+    beneficiaryBankName,
+    notes,
+    memo
   };
 }

@@ -119,6 +119,8 @@ export interface MatchedInvoice {
   taxAmount?: number;
   paymentMethod?: string;
   description?: string;
+  notes?: string;
+  memo?: string;
   
   // Rich invoice metadata from invoice inspection
   clientReference?: string;
@@ -276,6 +278,8 @@ export interface InvoiceBatchItem {
   sourceRunId?: string;
   poNumber?: string;
   description?: string;
+  notes?: string;
+  memo?: string;
   jobNumber?: string;
   expensesType?: string;
   category?: string;

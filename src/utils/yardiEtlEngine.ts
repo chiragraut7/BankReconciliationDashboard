@@ -1,6 +1,7 @@
 import { YardiEtlRecord, YardiVendorMapping, YardiEntityMapping, EtlRecordOverride } from '../types/yardiMapping';
 import { InvoiceBatchItem, MatchedInvoice, InvoiceETLFormat } from '../types/reconciliation';
 import { findVendorMapping, findEntityMapping } from './yardiMapping';
+import { getInvoiceTableDetails } from './invoiceTableData';
 
 export const YARDI_VOYAGER_SCHEMA_COLUMNS = [
   'TRANNUM',
@@ -110,15 +111,25 @@ export function generateInvoiceEtlRecords(
   const records: YardiEtlRecord[] = [];
 
   invoices.forEach((inv, invIndex) => {
-    const invoiceVendorName = inv.entityName || 'Unknown Vendor';
+    const details = getInvoiceTableDetails(inv);
+    const invoiceVendorName = (inv as any).vendorName || details.vendorName || inv.entityName || 'Unknown Vendor';
     const vMap = findVendorMapping(invoiceVendorName, vendorMappings);
     const defaultYardiVendorCode = vMap && vMap.status === 'Mapped' ? vMap.yardiVendorCode : '';
     const ourVendorCode = vMap?.ourVendorCode || `VND-${invoiceVendorName.slice(0, 4).toUpperCase()}`;
 
+    const clientReference = (inv as any).clientReference || details.clientReference || '';
+    const sourceEntityName = (inv as any).sourceEntityName || details.sourceEntityName || '';
+    const defaultPayingEntityName = (inv as any).payingEntityName || details.payingEntityName || inv.payingEntity || inv.entity || inv.entityName || 'Default Operating Entity';
+    const payingBankName = (inv as any).payingBankName || details.payingBankName || '';
+    const beneficiaryName = (inv as any).beneficiaryName || details.beneficiaryName || '';
+    const beneficiaryBankBic = (inv as any).beneficiaryBankBic || details.beneficiaryBankBic || '';
+    const beneficiaryBankName = (inv as any).beneficiaryBankName || details.beneficiaryBankName || '';
+    const baseAllocation = (inv as any).allocation || details.allocation || '100.00%';
+
     const exchangeRate = inv.exchangeRate || 1.0;
     const invCurrency = inv.currency || 'USD';
     const invoiceDate = inv.date || '2026-08-31';
-    const dueDate = inv.dueDate || '2026-09-30';
+    const invoiceDueDate = inv.dueDate || '2026-09-30';
     const poNumber = inv.poNumber || '';
     const jobNumber = inv.jobNumber || '';
     const paymentTerms = inv.paymentTerms || 'Net 30 days';
@@ -127,7 +138,7 @@ export function generateInvoiceEtlRecords(
     const category = inv.category || 'OPEX Services';
     const vendorVatNumber = inv.vendorVatNumber || '';
     const fromDate = inv.fromDate || invoiceDate;
-    const toDate = inv.toDate || dueDate;
+    const toDate = inv.toDate || invoiceDueDate;
 
     // Case 1: Invoice has structured richLineItems
     if (inv.richLineItems && inv.richLineItems.length > 0) {
@@ -152,11 +163,12 @@ export function generateInvoiceEtlRecords(
             const yardiEntityCode = override.yardiEntityCode ?? defaultYardiEntityCode;
             const glCode = override.glCode ?? lineGlCode;
             const finalDesc = override.lineDescription ?? lineDesc;
-            const defaultNote = `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName} (${split.percent.toFixed(1)}%)`;
+            const invoiceBaseNote = (inv as any).notes || (inv as any).memo;
+            const defaultNote = invoiceBaseNote || `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName} (${split.percent.toFixed(1)}%)`;
             const notes = override.notes ?? defaultNote;
 
             const splitPct = split.percent;
-            const apportionedGross = split.totalAmount ?? (lineTotal * splitPct) / 100;
+            const apportionedGross = override.apportionedGrossAmount ?? (split.totalAmount ?? (lineTotal * splitPct) / 100);
             const apportionedNet = split.amount ?? (lineNet * splitPct) / 100;
             const apportionedTax = split.vat ?? (lineTax * splitPct) / 100;
             const apportionedUsd = invCurrency === 'USD' ? apportionedGross : apportionedGross * exchangeRate;
@@ -180,7 +192,7 @@ export function generateInvoiceEtlRecords(
               invoiceNumber: inv.invoiceNumber,
               invoiceDisplayId: inv.invoiceIdDisplay || `#${invIndex + 1}`,
               invoiceDate,
-              dueDate,
+              dueDate: override.dueDate ?? invoiceDueDate,
               ourVendorName: invoiceVendorName,
               ourVendorCode,
               yardiVendorCode,
@@ -208,6 +220,15 @@ export function generateInvoiceEtlRecords(
               vendorVatNumber,
               fromDate,
               toDate,
+              clientReference: override.clientReference ?? clientReference,
+              sourceEntityName,
+              payingEntityName: targetEntityName,
+              payingBankName,
+              beneficiaryName,
+              beneficiaryBankBic,
+              beneficiaryBankName,
+              allocation: `${splitPct.toFixed(2)}%`,
+              formattedAmount: Number(apportionedGross.toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
               isVendorMapped,
               isEntityMapped,
               hasMappingError,
@@ -234,11 +255,12 @@ export function generateInvoiceEtlRecords(
             const yardiEntityCode = override.yardiEntityCode ?? defaultYardiEntityCode;
             const glCode = override.glCode ?? lineGlCode;
             const finalDesc = override.lineDescription ?? lineDesc;
-            const defaultNote = `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName} (${app.percent.toFixed(1)}%)`;
+            const invoiceBaseNote = (inv as any).notes || (inv as any).memo;
+            const defaultNote = invoiceBaseNote || `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName} (${app.percent.toFixed(1)}%)`;
             const notes = override.notes ?? defaultNote;
 
             const splitPct = app.percent;
-            const apportionedGross = (lineTotal * splitPct) / 100;
+            const apportionedGross = override.apportionedGrossAmount ?? ((lineTotal * splitPct) / 100);
             const apportionedNet = (lineNet * splitPct) / 100;
             const apportionedTax = (lineTax * splitPct) / 100;
             const apportionedUsd = invCurrency === 'USD' ? apportionedGross : apportionedGross * exchangeRate;
@@ -262,7 +284,7 @@ export function generateInvoiceEtlRecords(
               invoiceNumber: inv.invoiceNumber,
               invoiceDisplayId: inv.invoiceIdDisplay || `#${invIndex + 1}`,
               invoiceDate,
-              dueDate,
+              dueDate: override.dueDate ?? invoiceDueDate,
               ourVendorName: invoiceVendorName,
               ourVendorCode,
               yardiVendorCode,
@@ -290,6 +312,15 @@ export function generateInvoiceEtlRecords(
               vendorVatNumber,
               fromDate,
               toDate,
+              clientReference: override.clientReference ?? clientReference,
+              sourceEntityName,
+              payingEntityName: targetEntityName,
+              payingBankName,
+              beneficiaryName,
+              beneficiaryBankBic,
+              beneficiaryBankName,
+              allocation: `${splitPct.toFixed(2)}%`,
+              formattedAmount: Number(apportionedGross.toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
               isVendorMapped,
               isEntityMapped,
               hasMappingError,
@@ -305,7 +336,7 @@ export function generateInvoiceEtlRecords(
         // Subcase 1C: Single entity invoice with rich line items
         else {
           const recordId = `${inv.id}_li${lineIdx}`;
-          const targetEntityName = inv.payingEntity || inv.entity || inv.entityName || 'Default Operating Entity';
+          const targetEntityName = inv.payingEntity || inv.entity || inv.entityName || defaultPayingEntityName;
           const eMap = findEntityMapping(targetEntityName, entityMappings);
           const defaultYardiEntityCode = eMap && eMap.status === 'Mapped' ? eMap.yardiEntityCode : '';
           const ourEntityCode = eMap?.ourEntityCode || `ENT-${targetEntityName.slice(0, 4).toUpperCase()}`;
@@ -315,10 +346,12 @@ export function generateInvoiceEtlRecords(
           const yardiEntityCode = override.yardiEntityCode ?? defaultYardiEntityCode;
           const glCode = override.glCode ?? lineGlCode;
           const finalDesc = override.lineDescription ?? lineDesc;
-          const defaultNote = `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName}`;
+          const invoiceBaseNote = (inv as any).notes || (inv as any).memo;
+          const defaultNote = invoiceBaseNote || `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName}`;
           const notes = override.notes ?? defaultNote;
 
-          const apportionedUsd = invCurrency === 'USD' ? lineTotal : lineTotal * exchangeRate;
+          const apportionedGross = override.apportionedGrossAmount ?? lineTotal;
+          const apportionedUsd = invCurrency === 'USD' ? apportionedGross : apportionedGross * exchangeRate;
           const isVendorMapped = Boolean(yardiVendorCode.trim());
           const isEntityMapped = Boolean(yardiEntityCode.trim());
           const hasMappingError = !isVendorMapped || !isEntityMapped;
@@ -338,7 +371,7 @@ export function generateInvoiceEtlRecords(
             invoiceNumber: inv.invoiceNumber,
             invoiceDisplayId: inv.invoiceIdDisplay || `#${invIndex + 1}`,
             invoiceDate,
-            dueDate,
+            dueDate: override.dueDate ?? invoiceDueDate,
             ourVendorName: invoiceVendorName,
             ourVendorCode,
             yardiVendorCode,
@@ -366,6 +399,15 @@ export function generateInvoiceEtlRecords(
             vendorVatNumber,
             fromDate,
             toDate,
+            clientReference: override.clientReference ?? clientReference,
+            sourceEntityName,
+            payingEntityName: targetEntityName,
+            payingBankName,
+            beneficiaryName,
+            beneficiaryBankBic,
+            beneficiaryBankName,
+            allocation: baseAllocation,
+            formattedAmount: Number(lineTotal.toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
             isVendorMapped,
             isEntityMapped,
             hasMappingError,
@@ -394,11 +436,12 @@ export function generateInvoiceEtlRecords(
         const glCode = override.glCode ?? vMap?.defaultGlAccount ?? 'GL-6000 OPEX';
         const lineDesc = inv.description || inv.expensesType || 'Invoice Allocation';
         const finalDesc = override.lineDescription ?? lineDesc;
-        const defaultNote = `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName} (${app.percent.toFixed(1)}%)`;
+        const invoiceBaseNote = (inv as any).notes || (inv as any).memo;
+        const defaultNote = invoiceBaseNote || `Inv ${inv.invoiceNumber} • ${finalDesc} • ${targetEntityName} (${app.percent.toFixed(1)}%)`;
         const notes = override.notes ?? defaultNote;
 
         const splitPct = app.percent;
-        const apportionedGross = app.gross ?? (inv.amount * splitPct) / 100;
+        const apportionedGross = override.apportionedGrossAmount ?? (app.gross ?? (inv.amount * splitPct) / 100);
         const apportionedNet = app.net ?? apportionedGross;
         const apportionedTax = app.vat ?? 0;
         const apportionedUsd = invCurrency === 'USD' ? apportionedGross : apportionedGross * exchangeRate;
@@ -422,7 +465,7 @@ export function generateInvoiceEtlRecords(
           invoiceNumber: inv.invoiceNumber,
           invoiceDisplayId: inv.invoiceIdDisplay || `#${invIndex + 1}`,
           invoiceDate,
-          dueDate,
+          dueDate: override.dueDate ?? invoiceDueDate,
           ourVendorName: invoiceVendorName,
           ourVendorCode,
           yardiVendorCode,
@@ -450,6 +493,15 @@ export function generateInvoiceEtlRecords(
           vendorVatNumber,
           fromDate,
           toDate,
+          clientReference: override.clientReference ?? clientReference,
+          sourceEntityName,
+          payingEntityName: targetEntityName,
+          payingBankName,
+          beneficiaryName,
+          beneficiaryBankBic,
+          beneficiaryBankName,
+          allocation: `${splitPct.toFixed(2)}%`,
+          formattedAmount: Number(apportionedGross.toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
           isVendorMapped,
           isEntityMapped,
           hasMappingError,
@@ -465,7 +517,7 @@ export function generateInvoiceEtlRecords(
     // Case 3: Simple 1-to-1 single invoice
     else {
       const recordId = `${inv.id}_row0`;
-      const targetEntityName = inv.payingEntity || inv.entity || inv.entityName || 'Default Operating Entity';
+      const targetEntityName = inv.payingEntity || inv.entity || inv.entityName || defaultPayingEntityName;
       const eMap = findEntityMapping(targetEntityName, entityMappings);
       const defaultYardiEntityCode = eMap && eMap.status === 'Mapped' ? eMap.yardiEntityCode : '';
       const ourEntityCode = eMap?.ourEntityCode || `ENT-${targetEntityName.slice(0, 4).toUpperCase()}`;
@@ -476,10 +528,11 @@ export function generateInvoiceEtlRecords(
       const glCode = override.glCode ?? vMap?.defaultGlAccount ?? (inv.expensesType ? `GL-5000 ${inv.expensesType}` : 'GL-6000 OPEX');
       const lineDesc = inv.description || inv.expensesType || 'Invoice Service Charge';
       const finalDesc = override.lineDescription ?? lineDesc;
-      const defaultNote = `Inv ${inv.invoiceNumber} • ${finalDesc}`;
+      const invoiceBaseNote = (inv as any).notes || (inv as any).memo;
+      const defaultNote = invoiceBaseNote || `Inv ${inv.invoiceNumber} • ${finalDesc}`;
       const notes = override.notes ?? defaultNote;
 
-      const totalGross = inv.amount;
+      const totalGross = override.apportionedGrossAmount ?? inv.amount;
       const totalNet = (inv as any).totalExVat ?? totalGross;
       const totalTax = (inv as any).taxAmount ?? 0;
       const apportionedUsd = invCurrency === 'USD' ? totalGross : totalGross * exchangeRate;
@@ -503,7 +556,7 @@ export function generateInvoiceEtlRecords(
         invoiceNumber: inv.invoiceNumber,
         invoiceDisplayId: inv.invoiceIdDisplay || `#${invIndex + 1}`,
         invoiceDate,
-        dueDate,
+        dueDate: override.dueDate ?? invoiceDueDate,
         ourVendorName: invoiceVendorName,
         ourVendorCode,
         yardiVendorCode,
@@ -531,6 +584,15 @@ export function generateInvoiceEtlRecords(
         vendorVatNumber,
         fromDate,
         toDate,
+        clientReference: override.clientReference ?? clientReference,
+        sourceEntityName,
+        payingEntityName: targetEntityName,
+        payingBankName,
+        beneficiaryName,
+        beneficiaryBankBic,
+        beneficiaryBankName,
+        allocation: baseAllocation,
+        formattedAmount: Number(totalGross.toFixed(2)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         isVendorMapped,
         isEntityMapped,
         hasMappingError,

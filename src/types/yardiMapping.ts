@@ -67,6 +67,17 @@ export interface YardiEtlRecord {
   fromDate?: string;
   toDate?: string;
   
+  // Step 1 Table Matching Fields (Exact data mirror from Step 1)
+  clientReference?: string;
+  sourceEntityName?: string;
+  payingEntityName?: string;
+  payingBankName?: string;
+  beneficiaryName?: string;
+  beneficiaryBankBic?: string;
+  beneficiaryBankName?: string;
+  allocation?: string;
+  formattedAmount?: string;
+  
   // Validation Flags
   isVendorMapped: boolean;
   isEntityMapped: boolean;
@@ -110,4 +121,8 @@ export interface EtlRecordOverride {
   lineDescription?: string;
   yardiVendorCode?: string;
   yardiEntityCode?: string;
+  apportionedGrossAmount?: number;
+  dueDate?: string;
+  poNumber?: string;
+  clientReference?: string;
 }
