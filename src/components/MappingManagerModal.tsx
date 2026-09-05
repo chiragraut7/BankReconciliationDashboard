@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Search,
@@ -72,6 +72,16 @@ export const MappingManagerModal: React.FC<MappingManagerModalProps> = ({
   const [newFundCode, setNewFundCode] = useState('');
 
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
+      setLocalVendors(vendorMappings);
+      setLocalEntities(entityMappings);
+    }
+  }, [isOpen, initialTab, vendorMappings, entityMappings]);
 
   if (!isOpen) return null;
 

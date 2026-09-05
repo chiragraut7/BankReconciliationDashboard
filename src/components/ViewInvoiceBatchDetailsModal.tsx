@@ -36,6 +36,7 @@ import { InvoiceBatch, ReconciliationRun, MatchedInvoice, InvoiceBatchItem, Invo
 import { InvoiceDetailModal } from './InvoiceDetailModal';
 import { MappingManagerModal } from './MappingManagerModal';
 import { EtlLoaderPreviewTable } from './EtlLoaderPreviewTable';
+import { SelectedInvoicesMappingTab } from './SelectedInvoicesMappingTab';
 import { formatCurrency, parseInvoiceDate } from '../utils/formatters';
 import { computeEntitySplits } from '../utils/entitySplits';
 import { 
@@ -76,9 +77,9 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
   onExportToErp,
   onRemoveInvoice
 }) => {
-  // Active Workspace Tab: 'invoices' | 'loader'
-  const [activeTab, setActiveTab] = useState<'invoices' | 'loader'>(() => {
-    return batch?.status === 'Exported' ? 'loader' : 'invoices';
+  // Active Workspace Tab: 'invoices' | 'mapping' | 'yardi_cols'
+  const [activeTab, setActiveTab] = useState<'invoices' | 'mapping' | 'yardi_cols'>(() => {
+    return batch?.status === 'Exported' ? 'yardi_cols' : 'invoices';
   });
 
   // Format selection (sync with batch.format if valid or default to YARDI_VOYAGER_LOADER)
@@ -93,6 +94,7 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
   const [vendorMappings, setVendorMappings] = useState<YardiVendorMapping[]>(() => getStoredVendorMappings());
   const [entityMappings, setEntityMappings] = useState<YardiEntityMapping[]>(() => getStoredEntityMappings());
   const [isMappingModalOpen, setIsMappingModalOpen] = useState<boolean>(false);
+  const [mappingModalInitialTab, setMappingModalInitialTab] = useState<'vendors' | 'entities'>('entities');
   const [mappingNotification, setMappingNotification] = useState<string | null>(null);
 
   // ETL Record Field Overrides (Selective user edits on notes, GL code, descriptions)
@@ -127,7 +129,7 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
   // Reset tab and format when batch changes
   useEffect(() => {
     if (batch?.status === 'Exported') {
-      setActiveTab('loader');
+      setActiveTab('yardi_cols');
     } else {
       setActiveTab('invoices');
     }
@@ -370,21 +372,16 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
     }, 4500);
   };
 
-  // Handler to safely navigate to Tab 2 (Loader File Preview & Inline Edit)
-  const handleGoToLoaderTab = () => {
-    if (batch && batch.status !== 'Exported' && hasUnmapped) {
-      const missingVendorsCount = (batchValidation.missingVendors || []).length;
-      const missingEntitiesCount = (batchValidation.missingEntities || []).length;
-
-      setMappingNotification(
-        `⛔ Cannot proceed to next screen: All required mapping must happen in this batch screen first (${missingVendorsCount} vendor(s), ${missingEntitiesCount} entity/entities unmapped). Please configure property and vendor mapping for the highlighted items below.`
-      );
-      setTimeout(() => setMappingNotification(null), 6000);
-      return;
-    }
-
-    setActiveTab('loader');
+  // Safe navigation handlers
+  const handleGoToMappingTab = () => {
+    setActiveTab('mapping');
   };
+
+  const handleGoToYardiColsTab = () => {
+    setActiveTab('yardi_cols');
+  };
+
+  const handleGoToLoaderTab = handleGoToYardiColsTab;
 
   const handleDatePresetChange = (preset: 'All' | 'Last7Days' | 'Last30Days' | 'Aug2026' | 'Sep2026' | 'Custom') => {
     setDatePreset(preset);
@@ -699,57 +696,60 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
           )}
 
           {/* WORKSPACE NAVIGATION TABS (PARITY WITH CREATE BATCH) */}
-          <div className="px-6 py-2.5 bg-white border-b border-gray-200 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-              {batch.status !== 'Exported' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('invoices')}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                    activeTab === 'invoices'
-                      ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <Table className="w-4 h-4" />
-                  <span>1. Batch Invoices & Apportionment</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-gray-200 text-gray-800">
-                    {(batch.invoices || []).length}
-                  </span>
-                </button>
-              )}
+          <div className="px-6 py-2.5 bg-white border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('invoices')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'invoices'
+                    ? 'bg-orange-50 text-[#EA580C] border border-orange-200 shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-transparent'
+                }`}
+              >
+                <Table className="w-4 h-4" />
+                <span>1. Select Reconciled Invoice</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-gray-200 text-gray-800 font-mono">
+                  {(batch.invoices || []).length}
+                </span>
+              </button>
 
               <button
                 type="button"
-                onClick={handleGoToLoaderTab}
-                className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  hasUnmapped
-                    ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
-                    : activeTab === 'loader'
-                    ? 'bg-orange-50 text-[#EA580C] border border-orange-200'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                onClick={() => setActiveTab('mapping')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'mapping'
+                    ? 'bg-orange-50 text-[#EA580C] border border-orange-200 shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-transparent'
                 }`}
-                title={
-                  hasUnmapped
-                    ? 'All vendors and entities must be mapped before proceeding to Loader File Preview'
-                    : 'Switch to Loader File Preview & Inline Edit'
-                }
               >
+                <Building2 className="w-4 h-4 text-indigo-600" />
+                <span>2. Selected Reconciled invoices mapping entities and property</span>
                 {hasUnmapped ? (
-                  <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-                ) : (
-                  <Layers className="w-4 h-4 shrink-0" />
-                )}
-                <span>{batch.status === 'Exported' ? 'Loader File Preview & Inline Edit' : '2. Loader File Preview & Inline Edit'}</span>
-                {hasUnmapped ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">
-                    Mapping Required
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 font-mono">
+                    {(batchValidation.missingVendors?.length || 0) + (batchValidation.missingEntities?.length || 0)} Unmapped
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EA580C] text-white">
-                    {etlRecords.length} GL Rows
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+                    ✓ Mapped
                   </span>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('yardi_cols')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  activeTab === 'yardi_cols'
+                    ? 'bg-orange-50 text-[#EA580C] border border-orange-200 shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-transparent'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-[#EA580C]" />
+                <span>3. Yardi Voyager (87 Cols) with some column editable</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EA580C] text-white font-mono">
+                  {etlRecords.length} GL Rows
+                </span>
               </button>
             </div>
 
@@ -1508,8 +1508,46 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
               </div>
             )}
 
-            {/* TAB 2: INTERACTIVE & EDITABLE ETL LOADER TABLE */}
-            {activeTab === 'loader' && (
+            {/* TAB 2: SELECTED RECONCILED INVOICES MAPPING ENTITIES AND PROPERTY */}
+            {activeTab === 'mapping' && (
+              <SelectedInvoicesMappingTab
+                selectedInvoices={batch.invoices || []}
+                vendorMappings={vendorMappings}
+                entityMappings={entityMappings}
+                onUpdateVendorMappings={(updated) => {
+                  setVendorMappings(updated);
+                  saveStoredVendorMappings(updated);
+                }}
+                onUpdateEntityMappings={(updated) => {
+                  setEntityMappings(updated);
+                  saveStoredEntityMappings(updated);
+                }}
+                onOpenQuickMap={handleOpenQuickMap}
+                onOpenMappingManager={(tab = 'entities') => {
+                  setMappingModalInitialTab(tab);
+                  setIsMappingModalOpen(true);
+                }}
+                onProceedToStep3={() => setActiveTab('yardi_cols')}
+                onBackToStep1={() => setActiveTab('invoices')}
+                onInspectInvoice={(inv) => {
+                  setInspectingInvoice(inv as any);
+                }}
+                batchTotals={{
+                  count: (batch.invoices || []).length,
+                  totalAmount: batch.totalAmount || 0
+                }}
+                etlRecords={etlRecords}
+                recordOverrides={recordOverrides}
+                onUpdateRecordOverride={handleUpdateRecordOverride}
+                onApplyNoteToInvoice={handleApplyNoteToInvoice}
+                onResetOverrides={handleResetOverrides}
+                batchId={batch.id}
+                batchName={batch.name}
+              />
+            )}
+
+            {/* TAB 3: YARDI VOYAGER (87 COLS) WITH EDITABLE COLUMNS */}
+            {activeTab === 'yardi_cols' && (
               <EtlLoaderPreviewTable
                 records={etlRecords}
                 format={format}
@@ -1521,6 +1559,7 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
                 onOpenMappingManager={() => setIsMappingModalOpen(true)}
                 batchName={batch.name}
                 batchId={batch.id}
+                initialViewMode="yardi_schema"
               />
             )}
           </div>
@@ -1536,58 +1575,62 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
             </button>
 
             <div className="flex items-center gap-3">
-              {batch.status !== 'Exported' && (
-                activeTab === 'invoices' ? (
+              {activeTab === 'invoices' && (
+                <button
+                  type="button"
+                  onClick={handleGoToMappingTab}
+                  className="px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 shadow-xs bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white"
+                >
+                  <span>Proceed to Step 2: Mapping Entities & Property</span>
+                  <ArrowRight className="w-4 h-4 shrink-0" />
+                </button>
+              )}
+
+              {activeTab === 'mapping' && (
+                <>
                   <button
                     type="button"
-                    onClick={handleGoToLoaderTab}
-                    className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 shadow-xs ${
-                      hasUnmapped
-                        ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300'
-                        : 'bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white'
-                    }`}
-                    title={
-                      hasUnmapped
-                        ? 'Complete all required property and vendor mappings on this batch screen before proceeding'
-                        : 'Proceed to Loader File Preview & Inline Edit'
-                    }
+                    onClick={() => setActiveTab('invoices')}
+                    className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                   >
-                    {hasUnmapped ? (
-                      <>
-                        <Lock className="w-3.5 h-3.5 text-amber-800 shrink-0" />
-                        <span>Required Mapping Pending ({(batchValidation.missingVendors?.length || 0) + (batchValidation.missingEntities?.length || 0)}) — Map to Proceed</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Proceed to Next Screen: Loader File Preview</span>
-                        <ArrowRight className="w-4 h-4 shrink-0" />
-                      </>
-                    )}
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Step 1: Invoices</span>
                   </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('invoices')}
-                      className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      <span>Back to Invoices</span>
-                    </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onExportToErp) onExportToErp(batch);
-                        onClose();
-                      }}
-                      className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Post & Sync to ERP</span>
-                    </button>
-                  </>
-                )
+                  <button
+                    type="button"
+                    onClick={handleGoToYardiColsTab}
+                    className="px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 shadow-xs bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white"
+                  >
+                    <span>Proceed to Step 3: Yardi Voyager (87 Cols)</span>
+                    <ArrowRight className="w-4 h-4 shrink-0" />
+                  </button>
+                </>
+              )}
+
+              {activeTab === 'yardi_cols' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('mapping')}
+                    className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Step 2: Mapping</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onExportToErp) onExportToErp(batch);
+                      onClose();
+                    }}
+                    className="px-4 py-2 bg-[#EA580C] hover:bg-[#D94E07] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Post & Sync to ERP</span>
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -1731,6 +1774,7 @@ export const ViewInvoiceBatchDetailsModal: React.FC<ViewInvoiceBatchDetailsModal
       <MappingManagerModal
         isOpen={isMappingModalOpen}
         onClose={() => setIsMappingModalOpen(false)}
+        initialTab={mappingModalInitialTab}
         vendorMappings={vendorMappings}
         entityMappings={entityMappings}
         onUpdateVendorMappings={(updated) => {

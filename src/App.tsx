@@ -72,20 +72,14 @@ export default function App() {
 
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
-        if (activeNavTab === 'batches') {
-          setIsCreateBatchModalOpen(true);
-        } else if (activeNavTab === 'invoice_batches') {
+        if (activeNavTab === 'invoice_batches') {
           setIsCreateInvoiceBatchModalOpen(true);
         } else {
           setIsAddModalOpen(true);
         }
       } else if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
-        if (activeNavTab === 'invoice_batches') {
-          setIsCreateInvoiceBatchModalOpen(true);
-        } else {
-          setIsCreateBatchModalOpen(true);
-        }
+        setIsCreateInvoiceBatchModalOpen(true);
       } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setIsShortcutsOpen(prev => !prev);
@@ -268,51 +262,6 @@ export default function App() {
                   onViewBatch={(batch) => setViewingInvoiceBatch(batch)}
                   onDeleteBatch={handleDeleteInvoiceBatch}
                   onExportBatch={handleExportInvoiceBatch}
-                />
-              </div>
-            </>
-          ) : activeNavTab === 'batches' ? (
-            /* ========================================================================= */
-            /* ETL BATCHES (BANK STATEMENT) WORKSPACE SCREEN                             */
-            /* ========================================================================= */
-            <>
-              {/* 1. MAIN PAGE TITLE & TOP ACTION BAR FOR BATCHES */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight uppercase font-['Open_Sans',sans-serif]">
-                      CREATE BATCH
-                    </h1>
-                    <span className="bg-orange-100 text-[#EA580C] text-xs font-bold px-2.5 py-0.5 rounded-full border border-orange-200 font-mono">
-                      {batches.length} Batches
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-gray-500 mt-1 font-normal">
-                    Generate, review, and export structured ETL posting files derived from reconciled bank statements.
-                  </p>
-                </div>
-
-                {/* Top-Right Primary Button: [ + Create new Batch ] */}
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateBatchModalOpen(true)}
-                    className="w-full sm:w-auto bg-[#EA580C] hover:bg-[#D94E07] active:bg-[#C2410C] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create new Batch</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 2. ETL BATCHES LIST TABLE (100% Width) */}
-              <div className="w-full">
-                <EtlBatchesTable
-                  batches={batches}
-                  onCreateNewBatch={() => setIsCreateBatchModalOpen(true)}
-                  onViewBatch={(batch) => setViewingBatch(batch)}
-                  onDeleteBatch={handleDeleteBatch}
-                  onExportBatch={handleExportBatch}
                 />
               </div>
             </>

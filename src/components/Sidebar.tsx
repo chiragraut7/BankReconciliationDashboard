@@ -39,13 +39,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       active: true
     },
     {
-      id: 'batches',
-      label: 'Create Batch',
-      icon: Layers,
-      badge: batchCount > 0 ? `${batchCount}` : undefined,
-      active: false
-    },
-    {
       id: 'invoice_batches',
       label: 'Invoice Batch',
       icon: Receipt,
